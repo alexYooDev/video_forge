@@ -20,8 +20,7 @@ const pool = mariadb.createPool({
             CREATE TABLE users (
             id BIGINT AUTO_INCREMENT PRIMARY KEY,
             email VARCHAR(255) UNIQUE NOT NULL,
-            role ENUM('admin','user') NOT NULL DEFAULT 'user',
-            password_hash VARCHAR(255),
+            password VARCHAR(255),
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
 
