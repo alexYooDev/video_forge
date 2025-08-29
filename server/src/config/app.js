@@ -38,17 +38,11 @@ class App {
     }
 
     setupRoutes() {
-        this.app.use('/api', (req, res) => {
-            res.status(200).json({
-                success: true,
-                mesage: 'Video Forge API v1.0',
-                endpoints: {
-                    auth: '/api/auth',
-                    jobs: '/api/jobs',
-                    videos: '/api/videos'
-                }
-            });
-        });
+      const authRouter = require('../routes/authRouter');
+      const jobsRouter = require('../routes/jobsRouter');
+      
+      this.app.use('/api/auth', authRouter);
+      this.app.use('api/jobs', jobsRouter)
     }
 
     start() {
