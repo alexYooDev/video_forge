@@ -1,18 +1,20 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const db = requre('../config/database.js');
+const database = require('../config/database.js');
 
 class AuthService {
     async login(email, password) {
-        const users = await db.query('SELECT id, email, password FROM users WHERE email = ?', [email]);
+        const users = await database.query('SELECT id, email, password FROM users WHERE email = ?', [email]);
         
         if (users.length === 0) {
             throw new Error('Invalid email or password', 401);
         }
 
+        
         const user = users[0];
-
+        
         const isPasswordValid = await bcrypt.compare(password, user.password);
+        
         if (!isPasswordValid) {
             throw new Error('Invalid email or passoword', 401);
         }
@@ -34,7 +36,7 @@ class AuthService {
     generateToken(payload) {
         return jwt.sign(
             payload,
-            process.env.JWT_SCRECT,
+            process.env.JWT_SECRET,
             {
                 expiresIn: '12h',
                 issuer: 'Video-Forge-api'
@@ -62,6 +64,7 @@ class AuthService {
         if (users.length === 0) {
             throw new Error('User not found', 404);
         }
+        return users[0];
     }
 
     async register(email, password) {
@@ -77,7 +80,7 @@ class AuthService {
 
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        const result = await db.query(
+        const result = await database.query(
             'INSERT INTO users (email, password) VALUES (?, ?)',
             [email, hashedPassword]
         );
