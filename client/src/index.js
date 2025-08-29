@@ -4,10 +4,29 @@ import './index.css';
 import App from './App';
 import reportWebVitals from './reportWebVitals';
 
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+
+import Navbar from './components/Navbar';
+import { VideoProvider } from './context/VideoContext';
+import VideoListPage from './pages/VideoListPage';
+import LoginPage from './pages/LoginPage';
+
 const root = ReactDOM.createRoot(document.getElementById('root'));
+
 root.render(
   <React.StrictMode>
-    <App />
+    <BrowserRouter>
+      <header>
+        <Navbar/>
+      </header>
+      <VideoProvider>
+        <Routes>
+          <Route path='/' element={<App/>}/>
+          <Route path='video-list' element={<VideoListPage/>}/>
+          <Route path='login' element={<LoginPage/>} />
+        </Routes>
+      </VideoProvider>
+    </BrowserRouter>
   </React.StrictMode>
 );
 
