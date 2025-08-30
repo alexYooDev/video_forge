@@ -9,14 +9,17 @@ router.use(authenticate);
 router.get('/', jobController.getAllJobs);
 router.post('/', jobController.createJob);
 router.get('/stats', jobController.getUserStats);
+router.get('/process-stats', jobController.getProcesseingStatus);
 // load testing purpose
 router.post('/process-sample', jobController.processSample);
 
 
 // video processing
 router.get('/:id', jobController.getJobById);
-router.get('/:id', jobController.updateJob);
+router.put('/:id', jobController.updateJob);
 router.delete('/:id', jobController.deleteJob);
+
 router.get('/:id/assets', jobController.getJobAssets);
+router.get('/:id/assets/:assetid/download', jobController.downloadAsset);
 
 module.exports = router;

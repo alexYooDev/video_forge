@@ -3,6 +3,8 @@ const Joi = require('joi');
 const jobService = require('../services/jobService');
 const {JOB_STATUS} = require('../utils/constants');
 const jobSchema = require('../models/jobSchema')
+const path = require('path');
+const fs = require('fs-extra');
 
 class JobController {
 
@@ -57,7 +59,7 @@ class JobController {
 
             const job = await jobService.getJobById(jobId, req.user.id);
 
-            res.staus(200).json({
+            res.status(200).json({
                 data:job, message: 'Job retrieved successfully'
             });
 
@@ -127,9 +129,60 @@ class JobController {
         }
     }
 
+    async downloadAsset(req,res,next) {
+        try {
+            const jobId = parseInt(req.params.id);
+            const assetId = parseInt(req.paramas.assetId);
+
+            if (isNaN(jobId) || isNaN(assetId)) {
+                return res.status(400).json({message: 'Invalid job or asset ID'});
+            }
+
+            await jobService.getJobById(jobId, req.user.id);
+
+            const assets = await jobService.getJobAssets(jobId, req.user.id);
+            const asset = assets.find(asset => asset.id === assetId);
+
+            if (!asset) {
+                return res.status(404).json({message: "Asset not found."});
+            }
+
+            const filename = path.basename(asset.path);
+            const assetType = this.getAssetType(asset.asset_type);
+
+            res.setHeader(`Content-Disposition', 'attachment; filename="${filename}"`);
+            res.setHeader('Content-Type', assetType);
+
+            const fileStream = fs.createReadStream(asset.path);
+            fileStream.pipe(res);
+
+            fileStream.on('error', (error) => {
+                console.error('Error streaming file:', error);
+                if (!res.headersSent) {
+                    res.status(500).json({message: 'Error downloading file'});
+                }
+            });
+        } catch (err) {
+            next(err);
+        }
+    }
+
+    getAssetType(assetType) {
+        const type = {
+            'TRANSCODE_1080': 'video/mp4',
+            'TRNSCODE_720': 'video/mp4',
+            'TRANSCODE_480': 'video/mp4',
+            'GIF': 'image/gif',
+            'THUMBNAIL': 'image/jpeg',
+            'METADATA_JSON': 'application/json'
+        };
+
+        return type[assetType] || 'application/octect-stream';
+    }
+
     async getUserStats(req, res, next ) {
         try {
-            const stats = await jobServer.getUserStats(req.user.id);
+            const stats = await jobService.getUserJobStats(req.user.id);
 
             res.status(200).json({data: stats, message: 'Job stats retrieved successfully'});
 
@@ -138,26 +191,26 @@ class JobController {
         }
     }
 
+    async getProcesseingStatus(req, res, next) {
+        try {
+            const status = await jobService.getProcessingStatus();
+            
+            res.status(200).json({data: status, message: 'processing status retrieved successfully'});
+        } catch (err) {
+            next(err);
+        }
+    }
+
     async processSample(req, res, next) {
         try {
             const sampleJob = {
                 inputSource: 'sample-video.mp4',
-                outputFormats: ['720p','gif']
+                outputFormats: ['720p', '480p', 'gif'] // multiple formats for CPU intensive jobs
             };
 
+            console.log(`Creating sample job for load testing (user: ${req.user.id}`);
             const job = await jobService.createJob(req.user.id, sampleJob);
 
-            setTimeout(async() => {
-                try {
-                    await jobService.updateJob(
-                        job.id,
-                        req.user.id,
-                        {status: JOB_STATUS.COMPLETED, process:100}
-                    );
-                } catch(err) {
-                    console.error('Error updating sample job', err)
-                }
-            }, 2000);
 
             res.status(201).json({data: job, message: 'Sample processing job created'})
         } catch(err) {

@@ -1,13 +1,20 @@
 const database = require('../config/database');
-const {JOB_STATUS} = require('../utils/constants');
+const {JOB_STATUS, SUPPORTED_FORMATS} = require('../utils/constants');
+const VideoProcessingService = require('./videoProcessingService');
 
 class JobService {
     async createJob(userId, jobData) {
         const {inputSource, outputFormats = ['720p'] } = jobData;
 
         // Validate input source (basic validation for intial stage)
-        if (!inputSource || inputSource.trim().length() === 0) {
+        if (!inputSource || inputSource.trim().length === 0) {
             throw new Error("Input source is required");
+        }
+
+        const validFormats = outputFormats.filter(format => SUPPORTED_FORMATS.includes(format));
+
+        if (validFormats.length === 0) {
+            throw new Error('At least one valid output format is required');
         }
 
         try {
@@ -18,23 +25,27 @@ class JobService {
             );
 
             const jobId = result.insertId;
-
-            // return the created job at this initial stage
-            // later to be replaced by video processing
             const job = await this.getJobById(jobId, userId);
+
+            console.log(`Video processing for job: ${jobId} started...`);
+
+            VideoProcessingService.processJob(jobId).catch(error => {
+                console.error(`Background processing failed for job: ${jobId}`, error);
+            });
 
             return job
 
         } catch(err) {
-            throw new Error(`Failed to create job: ${err.message}`)
+            throw new Error(`Failed to create job: ${err.message}`, 500);
         }
     }
 
     async getJobById(jobId, userId) {
-        let query = 'SELECT * FROM WHERE id = ?';
-        let params = [jobId];
 
-        const jobs = await database.query(query, params);
+        const jobs = await database.query(
+          'SELECT * FROM jobs WHERE id = ? AND user_id = ?',
+          [jobId, userId]
+        );
 
         if (jobs.length === 0) {
             throw new Error('Job not found');
@@ -73,10 +84,16 @@ class JobService {
         const countResult = await database.query(countQuery, params);
         const total = countResult[0].total;
 
-        const jobQuery = `
-            SELECT * FROM jobs
+        const jobsQuery = `
+            SELECT 
+                j.*, 
+                CASE
+                 WHEN j.status = 'COMPLETED' THEN
+                  (SELECT COUNT(*) FROM media_assets WHERE job_id = j.id)
+                 ELSE 0
+            FROM jobs j
             ${where}
-            ORDER BY ${safeSortBy} ${safeSortOrder}
+            ORDER BY j.${safeSortBy} ${safeSortOrder}
             LIMIT ? OFFSET ?
         `;
 
@@ -111,7 +128,7 @@ class JobService {
         }
 
         if (updateFields.length === 0) {
-            throw new Error('No valid fields to update');
+            throw new Error('No valid fields to update', 400);
         }
 
         updateValues.push(jobId, userId);
@@ -127,23 +144,29 @@ class JobService {
     }
 
     async deleteJob(jobId, userId) {
-        const job = await this.getJobById(jobId, userId);
+      const job = await this.getJobById(jobId, userId);
 
-        // Only allow delete jobs when the file is not in being processed, downloaded, or cancelled
-        if (![JOB_STATUS.PENDING, JOB_STATUS.FAILED, JOB_STATUS.CANCELLED].includes(job.status)) {
-            throw Error('Cannot delete job in current status');
-        }
+      // Only allow delete jobs when the file is not being currently processed
+      if (
+        [
+          JOB_STATUS.DOWNLOADING,
+          JOB_STATUS.PROCESSING,
+          JOB_STATUS.UPLOADING,
+        ].includes(job.status)
+      ) {
+        throw Error('Cannot delete job in current status');
+      }
 
-        const result = await database.query(
-            'DELETE FROM jobs where id = ? AND user_id = ?',
-            [jobId, userId]
-        );
+      const result = await database.query(
+        'DELETE FROM jobs where id = ? AND user_id = ?',
+        [jobId, userId]
+      );
 
-        if (result.affectedRows === 0) {
-            throw new Error('Job not found');
-        }
+      if (result.affectedRows === 0) {
+        throw new Error('Job not found', 404);
+      }
 
-        return {message: 'Job deleted successfully'};
+      return { message: 'Job deleted successfully' };
     }
 
     async getJobAssets(jobId, userId) {
@@ -161,7 +184,8 @@ class JobService {
         const stats = await database.query(`
             SELECT
                 status,
-                count(*) as count
+                COUNT(*) as count
+                AVG(progress) as avg_progress
             FROM jobs
             WHERE user_id = ?
             GROUP BY status
@@ -175,11 +199,31 @@ class JobService {
         });
 
         stats.forEach(stat => {
-            statsObj[stat.status] = parseInt(stat.count);
+            statsObj[stat.status] = { 
+                count : parseInt(stat.count),
+                avg_progres: Math.round(stat.avg_progress || 0)
+            };
         });
 
         return statsObj;
     }
+    
+    async getProcessingStatus() {
+        const processingStats = VideoProcessingService.getProcessingStats();
+
+        const activeJobs = await database.query(`
+                SELECT id, status, progress, created_at
+                FROM jobs
+                WHERE status IN ('DOWNLOADING', 'PROCESSING', 'UPLOADING')
+                ORDER BY created_at ASC
+            `);
+        
+        return {
+            ...processingStats,
+            activeJobs
+        };
+    } 
+
 }
 
 module.exports = new JobService;
