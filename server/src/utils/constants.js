@@ -17,7 +17,14 @@ const ASSET_TYPES = {
   METADATA_JSON: 'METADATA_JSON',
 };
 
+const SUPPORTED_FORMATS = ['1080p', '720p', '480p', 'gif'];
+const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
+const MAX_DURATION = 600; // 10 minutes
+
 module.exports  = {
     JOB_STATUS,
-    ASSET_TYPES
+    ASSET_TYPES,
+    SUPPORTED_FORMATS,
+    MAX_FILE_SIZE,
+    MAX_DURATION
 }

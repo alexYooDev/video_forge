@@ -68,5 +68,5 @@ Public-Domain Video Transcoder Web App is a cloud-deployed REST API service that
 
 ### Reference
 
-Sample video source :
+ video source :
 - https://gist.github.com/jsturgis/3b19447b304616f18657
