@@ -204,8 +204,8 @@ class JobController {
     async processSample(req, res, next) {
         try {
             const sampleJob = {
-                inputSource: 'sample-video.mp4',
-                outputFormats: ['720p', '480p', 'gif'] // multiple formats for CPU intensive jobs
+              inputSource: process.env.SAMPLE_VIDEO_URL,
+              outputFormats: ['720p', '480p', 'gif'], // multiple formats for CPU intensive jobs
             };
 
             console.log(`Creating sample job for load testing (user: ${req.user.id}`);

@@ -128,7 +128,7 @@ class VideoProcessingService {
     console.log(`Download video from: ${videoUrl}`);
 
     if (videoUrl === 'local-sample.mp4') {
-      const samplePath = path.join(this.inputDir, 'sameple-video.mp4');
+      const samplePath = process.env.SAMPLE_VIDEO_URL;
 
       if (await fs.pathExists(samplePath)) {
         await fs.copy(samplePath, filePath);
