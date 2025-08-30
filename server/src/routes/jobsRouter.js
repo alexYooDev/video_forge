@@ -9,7 +9,7 @@ router.use(authenticate);
 router.get('/', jobController.getAllJobs);
 router.post('/', jobController.createJob);
 router.get('/stats', jobController.getUserStats);
-router.get('/process-stats', jobController.getProcesseingStatus);
+router.get('/process-stats', jobController.getProcessingStatus);
 // load testing purpose
 router.post('/process-sample', jobController.processSample);
 
@@ -20,6 +20,6 @@ router.put('/:id', jobController.updateJob);
 router.delete('/:id', jobController.deleteJob);
 
 router.get('/:id/assets', jobController.getJobAssets);
-router.get('/:id/assets/:assetid/download', jobController.downloadAsset);
+router.get('/:id/assets/:assetId/download', jobController.downloadAsset.bind(jobController));
 
 module.exports = router;

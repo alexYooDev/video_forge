@@ -1,10 +1,10 @@
 
-const db = require('../config/database');
+const database = require('../config/database');
 const bcrypt = require('bcryptjs');
 
 async function seedDB() {
     try {
-        await db.connect();
+        await database.connect();
 
         console.log('Seeding database...');
 
@@ -51,7 +51,7 @@ async function seedDB() {
     } catch(err) {
         console.error('Seeding failed', err.message);
     } finally {
-        await db.close();
+        await database.close();
     }
 }
 

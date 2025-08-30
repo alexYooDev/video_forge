@@ -6,27 +6,30 @@ import reportWebVitals from './reportWebVitals';
 
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 
-import Navbar from './components/Navbar';
 import { VideoProvider } from './context/VideoContext';
 import VideoListPage from './pages/VideoListPage';
-import LoginPage from './pages/LoginPage';
+
+import { AuthProvider } from './context/AuthProvider';
+
+import Header from './components/layout/Header';
+import Dashboard from './components/jobs/Dashboard';
+import JobList from './components/jobs/JobList';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 
 root.render(
   <React.StrictMode>
+    <AuthProvider>
     <BrowserRouter>
-      <header>
-        <Navbar/>
-      </header>
+      <Header/>
       <VideoProvider>
         <Routes>
           <Route path='/' element={<App/>}/>
-          <Route path='video-list' element={<VideoListPage/>}/>
-          <Route path='login' element={<LoginPage/>} />
+          <Route path='/jobs' element={<JobList/>} />
         </Routes>
       </VideoProvider>
     </BrowserRouter>
+    </AuthProvider>
   </React.StrictMode>
 );
 

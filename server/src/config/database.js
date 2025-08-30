@@ -9,10 +9,11 @@ class Database {
     async connect () {
         try {
           this.connection = await mysql.createConnection({
-            host: process.env.DB_HOST || 'localhost',
-            user: process.env.DB_USER || 'root',
-            password: process.env.DB_PASSWORD || 'Free200209!',
-            database: process.env.DB_NAME || 'video_transcoder',
+            host: process.env.DB_HOST,
+            user: process.env.DB_USER,
+            password: process.env.DB_PASSWORD,
+            database: process.env.DB_NAME,
+            enableKeepAlive: true,
           });
 
           console.log('Database connected successfully');
@@ -35,8 +36,14 @@ class Database {
 
     async close () {
         if (this.connection) {
+          try {
             await this.connection.end();
             console.log('Database connection closed.');
+          } catch(err) {
+            console.error('Error closing database connection:', err.message);
+          } finally {
+            this.connection = null;
+          }
         }
     }
 }

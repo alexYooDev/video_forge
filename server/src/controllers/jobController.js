@@ -33,7 +33,7 @@ class JobController {
             const options = {
                 page: req.query.page,
                 limit: req.query.limit,
-                staus: req.query.staus,
+                staus: req.query.status,
                 sortBy: req.query.sortBy,
                 sortOrder: req.query.sortOrder
             };
@@ -70,7 +70,7 @@ class JobController {
 
     async updateJob(req, res, next) {
         try {
-            const jobId = parseIn(req.params.id);
+            const jobId = parseInt(req.params.id);
 
             if (isNaN(jobId)) {
                 return res.status(400).json({message: 'Invalid Job ID'});
@@ -132,7 +132,7 @@ class JobController {
     async downloadAsset(req,res,next) {
         try {
             const jobId = parseInt(req.params.id);
-            const assetId = parseInt(req.paramas.assetId);
+            const assetId = parseInt(req.params.assetId);
 
             if (isNaN(jobId) || isNaN(assetId)) {
                 return res.status(400).json({message: 'Invalid job or asset ID'});
@@ -146,11 +146,11 @@ class JobController {
             if (!asset) {
                 return res.status(404).json({message: "Asset not found."});
             }
-
+            
             const filename = path.basename(asset.path);
             const assetType = this.getAssetType(asset.asset_type);
 
-            res.setHeader(`Content-Disposition', 'attachment; filename="${filename}"`);
+            res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
             res.setHeader('Content-Type', assetType);
 
             const fileStream = fs.createReadStream(asset.path);
@@ -177,7 +177,7 @@ class JobController {
             'METADATA_JSON': 'application/json'
         };
 
-        return type[assetType] || 'application/octect-stream';
+        return type[assetType] || 'application/octet-stream';
     }
 
     async getUserStats(req, res, next ) {
@@ -191,7 +191,7 @@ class JobController {
         }
     }
 
-    async getProcesseingStatus(req, res, next) {
+    async getProcessingStatus(req, res, next) {
         try {
             const status = await jobService.getProcessingStatus();
             

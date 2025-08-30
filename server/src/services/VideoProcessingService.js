@@ -30,6 +30,45 @@ class VideoProcessingService {
     }
   }
 
+  async analyzeInputSource(inputSource) {
+    console.log(`Analyzing input source: ${inputSource}`);
+
+    if (
+      inputSource.startsWith('./') ||
+      inputSource.startsWith('/') ||
+      inputSource.includes('data/inputs')
+    ) {
+      return {
+        type: 'LOCAL_FILE',
+        source: inputSource,
+        requiresDownload: false,
+      };
+    }
+
+    if (
+      inputSource.startsWith('http://') ||
+      inputSource.startsWith('https://')
+    ) {
+      return {
+        type: 'EXTERNAL_URL',
+        source: inputSource,
+        requiresDownload: true,
+        headers: {
+          'User-Agent': 'Video Forge',
+        },
+      };
+    }
+
+    return {
+      type: 'UNKNOWN',
+      source: inputSource,
+      requiresDownload: true,
+      headers: {
+        'User-Agent': 'VideoForge/1.0',
+      },
+    };
+  }
+
   async processJob(jobId) {
     if (this.currentJobs >= this.maxConcurrentJobs) {
       this.processingQueue.push(jobId);
@@ -47,7 +86,7 @@ class VideoProcessingService {
       await this.executeProcessing(jobId);
     } catch (err) {
       console.error(`Processing failed for job ${jobId}: `, err);
-      await this.handleProcesseingError(jobId, err);
+      await this.handleProcessingError(jobId, err);
     } finally {
       this.currentJobs--;
       this.processNextInQueue();
@@ -68,7 +107,10 @@ class VideoProcessingService {
     const inputVideoPath = await this.downloadVideo(job.input_source, jobId);
 
     const metadata = await this.getVideoMetadata(inputVideoPath);
+    console.log('Metadata extracted', metadata);
+
     await this.saveMetadata(jobId, metadata);
+    console.log('Metadata saved');
 
     await this.updateJobStatus(jobId, JOB_STATUS.PROCESSING, 20);
 
@@ -77,42 +119,23 @@ class VideoProcessingService {
     let currentStep = 0;
 
     for (const format of outputFormats) {
-      console.log(`Transcoding to ${format} for job ${jobId}`);
-      await this.transcodeVideo(inputVideoPath, format, jobId);
-      currentStep++;
+      try {
+        console.log(`Transcoding to ${format} for job ${jobId}`);
+        await this.transcodeVideo(inputVideoPath, format, jobId);
+        currentStep++;
 
-      const progress = 20 + (currentStep / totalSteps) * 60;
-
-      await this.updateJobStatus(
-        jobId,
-        JOB_STATUS.PROCESSING,
-        Math.round(progress)
-      );
+        const progress = 20 + (currentStep / totalSteps) * 60;
+        await this.updateJobStatus(
+          jobId,
+          JOB_STATUS.PROCESSING,
+          Math.round(progress)
+        );
+      } catch (err) {
+        console.error(`Error transcoding to ${format} for job ${jobId}:`, err);
+        await this.handleProcessingError(jobId, err);
+        break; // Optionally stop further processing for this job
+      }
     }
-
-    console.log(`Generating GIF for job ${jobId}`);
-
-    await this.generateGif(inputVideoPath, jobId);
-    currentStep++;
-    const gifProgress = 20 + (currentStep / totalSteps) * 60;
-
-    await this.updateJobStatus(
-      jobId,
-      JOB_STATUS.PROCESSING,
-      Math.round(gifProgress)
-    );
-
-    console.log(`Generating thumbnail for job ${jobId}`);
-    await this.generateThumbnail(inputVideoPath, jobId);
-    currentStep++;
-    const thumbnailProgress = 20 + (currentStep / totalSteps) * 60;
-    await this.updateJobStatus(
-      jobId,
-      JOB_STATUS.PROCESSING,
-      Math.round(thumbnailProgress)
-    );
-
-    await this.updateJobStatus(jobId, JOB_STATUS.UPLOADING, 90);
 
     // clean up input file
     await fs.remove(inputVideoPath);
@@ -121,34 +144,106 @@ class VideoProcessingService {
     console.log(`Job ${jobId} completed successfully.`);
   }
 
-  async downloadVideo(videoUrl, jobId) {
+  async downloadVideo(inputSource, jobId) {
+    let sourceInfo = await this.analyzeInputSource(inputSource);
     const fileName = `input_${jobId}_${uuidv4()}.mp4`;
-    const filePath = path.join(this.inputDir, fileName);
+    const targetPath = path.join(this.inputDir, fileName);
 
-    console.log(`Download video from: ${videoUrl}`);
-
-    if (videoUrl === 'local-sample.mp4') {
-      const samplePath = process.env.SAMPLE_VIDEO_URL;
-
-      if (await fs.pathExists(samplePath)) {
-        await fs.copy(samplePath, filePath);
-        console.log('Using local sample video');
-        return filePath;
-      } else {
-        throw new Error('Sample video not found.');
-      }
+    if (inputSource === 'local-sample.mp4') {
+      sourceInfo.source = process.env.SAMPLE_VIDEO_URL;
     }
 
+    console.log(`Processing ${sourceInfo.type} source: ${sourceInfo.source}`);
+
     try {
+      switch (sourceInfo.type) {
+        case 'LOCAL_FILE':
+          return await this.handleLocalFile(sourceInfo.source, targetPath);
+
+        case 'EXTERNAL_URL':
+          return await this.handleExternalUrlDownload(sourceInfo, targetPath);
+
+        default:
+          // Try as URL first, fallback to local if fails
+          try {
+            return await this.handleExternalUrlDownload(sourceInfo, targetPath);
+          } catch (urlError) {
+            console.warn(
+              `URL download failed, trying local file: ${urlError.message}`
+            );
+            return await this.handleLocalFile(sourceInfo.source, targetPath);
+          }
+      }
+    } catch (error) {
+      console.error(`Download failed for ${sourceInfo.type}:`, error.message);
+      throw new Error(`Failed to acquire video: ${error.message}`);
+    }
+  }
+
+  async handleExternalUrlDownload(sourceInfo, targetPath) {
+    console.log(`Downloading from external URL...`);
+
+    return await this.downloadFromUrl(
+      sourceInfo.source,
+      targetPath,
+      sourceInfo.headers,
+      60000
+    );
+  }
+
+  async handleLocalFile(sourcePath, targetPath) {
+    const resolvedPath = path.resolve(sourcePath);
+
+    if (!(await fs.pathExists(resolvedPath))) {
+      throw new Error(`Local file not found: ${resolvedPath}`);
+    }
+
+    const stats = await fs.stat(resolvedPath);
+    if (!stats.isFile()) {
+      throw new Error(`Path is not a file: ${resolvedPath}`);
+    }
+
+    // Copy to processing directory for consistency
+    await fs.copy(resolvedPath, targetPath);
+    console.log(`Using local file: ${resolvedPath}`);
+    return targetPath;
+  }
+
+  async downloadFromUrl(url, filePath, headers = {}, timeout = 60000) {
+    try {
+      console.log(`Start download: ${url}`);
+
       const response = await axios({
         method: 'GET',
-        url: videoUrl,
+        url: url,
         responseType: 'stream',
-        timeout: 30000,
+        timeout: timeout,
         headers: {
-          'User-Agent': 'VideoForge',
+          'User-Agent': 'Video Forge',
+          ...headers,
+        },
+        onDownloadProgress: (progressEvent) => {
+          if (progressEvent.total) {
+            const percentCompleted = Math.round(
+              (progressEvent.loaded * 100) / progressEvent.total
+            );
+            if (percentCompleted % 10 === 0) {
+              // Log every 10%
+              console.log(`Download progress: ${percentCompleted}%`);
+            }
+          }
         },
       });
+
+      const contentType = response.headers['content-type'];
+
+      if (
+        contentType &&
+        !contentType.includes('video') &&
+        !contentType.includes('octet-stream')
+      ) {
+        console.warn(`Unexpected content type: ${contentType}`);
+      }
 
       const writer = fs.createWriteStream(filePath);
       response.data.pipe(writer);
@@ -158,7 +253,10 @@ class VideoProcessingService {
           console.log(`Video downloaded to: ${filePath}`);
           resolve(filePath);
         });
-        writer.on('error', reject);
+        writer.on('error', (error) => {
+          console.error('unexpected error occured: ', error);
+          reject()
+        });
       });
     } catch (err) {
       throw new Error(`Failed to download video: ${err.message}`);
@@ -166,22 +264,23 @@ class VideoProcessingService {
   }
 
   async transcodeVideo(inputPath, format, jobId) {
-    const settings = this.getTranscodeSettings(format);
-    const outputFileName = `${jobId}_${format.toLowerCase()}.mp4`;
-    const outputPath = path.join(this.outputDir, outputFileName);
-
-    return new Promise((resolve, reject) => {
-      ffmpeg(inputPath)
+    try {
+      const settings = this.getTranscodeSettings(format);
+      const outputFileName = `${jobId}_${format.toLowerCase()}.mp4`;
+      const outputPath = path.join(this.outputDir, outputFileName);
+      
+      return new Promise((resolve, reject) => {
+        ffmpeg(inputPath)
         .videoCodec('libx264')
         .audioCodec('aac')
         .size(settings.resolution)
         .videoBitrate(settings.videoBitrate)
         .audioBitrate('128k')
         .fps(30)
-        .preset(process.env.FFMPEG_PRESET || 'medium')
+        .addOption('-preset', 'medium')
         .outputOptions([
           '-crf',
-          process.env.FFMPEG_CRF || '23',
+          '23',
           '-maxrate',
           settings.maxrate,
           '-bufsize',
@@ -216,72 +315,10 @@ class VideoProcessingService {
           reject(err);
         })
         .save(outputPath);
-    });
-  }
-
-  async generateGif(inputPath, jobId) {
-    const outputFileName = `${jobId}_preview.gif`;
-    const outputPath = path.join(this.outputDir, outputFileName);
-
-    return new Promise((resolve, reject) => {
-      ffmpeg(inputPath)
-        .complexFilter([
-          // Extract 3 seconds starting from 10% of video duration
-          '[0:v] trim=start_pts=PTS-STARTPTS+10:duration=3, scale=480:270, fps=10 [v1]',
-          // Generate palette for better GIF quality
-          '[v1] palettegen [palette]',
-          '[v1][palette] paletteuse',
-        ])
-        .outputOptions(['-loop', '0']) // Infinite loop
-        .on('end', async () => {
-          try {
-            const stats = await fs.stat(outputPath);
-            await this.saveMediaAsset(jobId, {
-              type: ASSET_TYPES.GIF,
-              path: outputPath,
-              size: stats.size,
-              filename: outputFileName,
-            });
-            console.log(`GIF generation completed`);
-            resolve();
-          } catch (error) {
-            reject(error);
-          }
-        })
-        .on('error', reject)
-        .save(outputPath);
-    });
-  }
-
-  async generateThumbnail(inputPath, jobId) {
-    const outputFileName = `${jobId}_thumbnail.jpg`;
-    const outputPath = path.join(this.outputDir, outputFileName);
-
-    return new Promise((resolve, reject) => {
-      ffmpeg(inputPath)
-        .screenshots({
-          count: 1,
-          folder: path.dirname(outputPath),
-          filename: path.basename(outputPath),
-          size: '320x180',
-        })
-        .on('end', async () => {
-          try {
-            const stats = await fs.stat(outputPath);
-            await this.saveMediaAsset(jobId, {
-              type: ASSET_TYPES.THUMBNAIL,
-              path: outputPath,
-              size: stats.size,
-              filename: outputFileName,
-            });
-            console.log(`Thumbnail generation completed`);
-            resolve();
-          } catch (error) {
-            reject(error);
-          }
-        })
-        .on('error', reject);
-    });
+      });
+    } catch (err) {
+      console.log(err);
+    }
   }
 
   async getVideoMetadata(inputPath) {

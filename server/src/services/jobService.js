@@ -86,18 +86,23 @@ class JobService {
 
         const jobsQuery = `
             SELECT 
-                j.*, 
-                CASE
-                 WHEN j.status = 'COMPLETED' THEN
-                  (SELECT COUNT(*) FROM media_assets WHERE job_id = j.id)
-                 ELSE 0
-            FROM jobs j
-            ${where}
-            ORDER BY j.${safeSortBy} ${safeSortOrder}
+                j.*,
+                CASE 
+                WHEN j.status = 'COMPLETED' THEN 
+                    (SELECT COUNT(*) FROM media_assets WHERE job_id = j.id)
+                ELSE 0 
+                END as asset_count
+            FROM jobs j 
+            ${where} 
+            ORDER BY j.${safeSortBy} ${safeSortOrder} 
             LIMIT ? OFFSET ?
         `;
 
-        const jobs = await database.query(jobsQuery, [...params, limitNum, offset]);
+        const jobs = await database.query(jobsQuery, [
+          ...params,
+          limitNum,
+          offset,
+        ]);
 
         return {
             jobs,
@@ -182,11 +187,11 @@ class JobService {
 
     async getUserJobStats(userId) {
         const stats = await database.query(`
-            SELECT
+            SELECT 
                 status,
-                COUNT(*) as count
+                COUNT(*) as count,
                 AVG(progress) as avg_progress
-            FROM jobs
+            FROM jobs 
             WHERE user_id = ?
             GROUP BY status
             `, [userId]
