@@ -4,11 +4,15 @@ import JobForm from './JobForm';
 import JobList from './JobList';
 import Card from '../ui/Card';
 import Button from '../ui/Button';
+import { useLocation } from 'react-router-dom';
 
 const Dashboard = () => {
   const { createJob, createSampleJob, stats, loading: jobsLoading } = useJobs();
   const [creatingJob, setCreatingJob] = useState(false);
-  const [showJobForm, setShowJobForm] = useState(false);
+  
+  const location = useLocation();
+
+  const {videoUrl} = location.state || ''
 
   const handleCreateJob = async (jobData) => {
     try {
@@ -17,7 +21,6 @@ const Dashboard = () => {
 
       if (result.success) {
         alert(`Job created successfully! Job ID: ${result.data.id}`);
-        setShowJobForm(false);
       } else {
         alert(`Failed to create job: ${result.error}`);
       }
@@ -82,10 +85,9 @@ const Dashboard = () => {
           Welcome to Video Forge! 🎬
         </h1>
         <p className='text-lg text-gray-600 max-w-2xl mx-auto'>
-          Transform your videos with professional transcoding, GIF generation,
-          and thumbnail creation. Upload a video or use our sample to get
-          started.
+          Transform your videos with professional transcoding!
         </p>
+        <p className='text-lg text-gray-600 max-w-2xl mx-auto'>Upload a video or use our sample to get started.</p>
       </div>
 
       {/* Stats Cards */}
@@ -138,14 +140,6 @@ const Dashboard = () => {
 
           <div className='flex flex-col sm:flex-row gap-4 justify-center max-w-2xl mx-auto'>
             <Button
-              size='lg'
-              onClick={() => setShowJobForm(!showJobForm)}
-              className='flex-1'
-            >
-              {showJobForm ? 'Hide Job Form' : 'Create New Job'}
-            </Button>
-
-            <Button
               variant='outline'
               size='lg'
               onClick={handleCreateSampleJob}
@@ -164,12 +158,11 @@ const Dashboard = () => {
       </Card>
 
       {/* Job Creation Form */}
-      {showJobForm && (
-        <JobForm onSubmit={handleCreateJob} loading={creatingJob} />
-      )}
-
-      {/* Jobs List */}
-      <JobList />
+      <JobForm
+        onSubmit={handleCreateJob}
+        videoUrl={videoUrl || ''}
+        loading={creatingJob}
+      />
 
       {/* Help Section */}
       {totalJobs === 0 && (

@@ -1,14 +1,21 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { SUPPORTED_FORMATS } from '../../utils/constants';
 import Button from '../ui/Button';
 import Card from '../ui/Card';
 
-const JobForm = ({ onSubmit, loading = false }) => {
+const JobForm = ({ onSubmit, videoUrl, loading = false }) => {
   const [formData, setFormData] = useState({
     inputSource: '',
     outputFormats: ['720p'],
   });
+
   const [errors, setErrors] = useState({});
+
+  useEffect(() => {
+    if (videoUrl && videoUrl !== '') {
+      setFormData({...formData, inputSource: videoUrl});
+    }
+  }, []);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -70,13 +77,6 @@ const JobForm = ({ onSubmit, loading = false }) => {
     });
   };
 
-  const handleSampleJob = () => {
-    setFormData({
-      inputSource: 'local-sample.mp4',
-      outputFormats: ['720p', '480p', 'gif'],
-    });
-  };
-
   return (
     <Card>
       <h3 className='text-lg font-medium text-gray-900 mb-6'>Create New Job</h3>
@@ -103,12 +103,11 @@ const JobForm = ({ onSubmit, loading = false }) => {
               } px-3 py-2 text-sm focus:border-primary-500 focus:ring-primary-500`}
             />
             <Button
-              type='button'
+              type='submit'
               variant='outline'
-              onClick={handleSampleJob}
               className='whitespace-nowrap'
             >
-              Use Sample
+              Submit
             </Button>
           </div>
           {errors.inputSource && (
@@ -128,7 +127,9 @@ const JobForm = ({ onSubmit, loading = false }) => {
             {SUPPORTED_FORMATS.map((format) => (
               <label
                 key={format}
-                className='relative flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50'
+                className={`relative flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50 ${formData.outputFormats.includes(
+                  format ? 'bg-green-300' : 'bg-white-100'
+                )}`}
               >
                 <input
                   type='checkbox'
@@ -204,7 +205,7 @@ const JobForm = ({ onSubmit, loading = false }) => {
             onClick={() =>
               setFormData({
                 inputSource: 'local-sample.mp4',
-                outputFormats: ['720p', '480p', 'gif'],
+                outputFormats: ['1080p','720p', '480p'],
               })
             }
           >

@@ -29,11 +29,16 @@ class JobService {
 
             console.log(`Video processing for job: ${jobId} started...`);
 
-            VideoProcessingService.processJob(jobId).catch(error => {
-                console.error(`Background processing failed for job: ${jobId}`, error);
-            });
+            VideoProcessingService.processJob(jobId, outputFormats).catch(
+              (error) => {
+                console.error(
+                  `Background processing failed for job: ${jobId}`,
+                  error
+                );
+              }
+            );
 
-            return job
+            return job;
 
         } catch(err) {
             throw new Error(`Failed to create job: ${err.message}`, 500);

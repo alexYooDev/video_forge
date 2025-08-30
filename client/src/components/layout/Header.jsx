@@ -47,17 +47,17 @@ const Header = () => {
               Dashboard
             </Link>
             <Link
+              to='/search-video'
+              className='text-gray-500 hover:text-primary-600 px-3 py-2 rounded-md text-sm font-medium'
+            >
+              Search videos
+            </Link>
+            {/* <Link
               to='/jobs'
               className='text-gray-500 hover:text-primary-600 px-3 py-2 rounded-md text-sm font-medium'
             >
               Jobs
-            </Link>
-            <Link
-              to='/processing'
-              className='text-gray-500 hover:text-primary-600 px-3 py-2 rounded-md text-sm font-medium'
-            >
-              Processing
-            </Link>
+            </Link> */}
           </nav>
 
           {/* User Menu */}

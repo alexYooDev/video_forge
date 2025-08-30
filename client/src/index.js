@@ -12,8 +12,8 @@ import VideoListPage from './pages/VideoListPage';
 import { AuthProvider } from './context/AuthProvider';
 
 import Header from './components/layout/Header';
-import Dashboard from './components/jobs/Dashboard';
 import JobList from './components/jobs/JobList';
+import SearchBar from './components/search/SearchBar';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 
@@ -26,6 +26,7 @@ root.render(
         <Routes>
           <Route path='/' element={<App/>}/>
           <Route path='/jobs' element={<JobList/>} />
+          <Route path='/search-video' element={<SearchBar/>} />
         </Routes>
       </VideoProvider>
     </BrowserRouter>

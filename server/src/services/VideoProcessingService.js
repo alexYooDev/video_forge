@@ -69,7 +69,7 @@ class VideoProcessingService {
     };
   }
 
-  async processJob(jobId) {
+  async processJob(jobId, validFormats) {
     if (this.currentJobs >= this.maxConcurrentJobs) {
       this.processingQueue.push(jobId);
       console.log(
@@ -83,7 +83,7 @@ class VideoProcessingService {
     console.log(`Starting processing for job ${jobId}`);
 
     try {
-      await this.executeProcessing(jobId);
+      await this.executeProcessing(jobId, validFormats);
     } catch (err) {
       console.error(`Processing failed for job ${jobId}: `, err);
       await this.handleProcessingError(jobId, err);
@@ -93,7 +93,7 @@ class VideoProcessingService {
     }
   }
 
-  async executeProcessing(jobId) {
+  async executeProcessing(jobId, validFormats) {
     const job = await this.getJobById(jobId);
 
     if (!job) {
@@ -104,7 +104,7 @@ class VideoProcessingService {
 
     await this.updateJobStatus(jobId, JOB_STATUS.DOWNLOADING, 10);
 
-    const inputVideoPath = await this.downloadVideo(job.input_source, jobId);
+    const inputVideoPath = await this.downloadVideo(job.input_source, job.output_formats, jobId);
 
     const metadata = await this.getVideoMetadata(inputVideoPath);
     console.log('Metadata extracted', metadata);
@@ -114,7 +114,7 @@ class VideoProcessingService {
 
     await this.updateJobStatus(jobId, JOB_STATUS.PROCESSING, 20);
 
-    const outputFormats = ['1080p', '720p', '480p'];
+    const outputFormats = validFormats;
     const totalSteps = outputFormats.length + 2;
     let currentStep = 0;
 
