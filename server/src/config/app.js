@@ -40,9 +40,9 @@ class App {
     setupRoutes() {
       const authRouter = require('../routes/authRouter');
       const jobsRouter = require('../routes/jobsRouter');
-      
+
       this.app.use('/api/auth', authRouter);
-      this.app.use('api/jobs', jobsRouter)
+      this.app.use('/api/jobs', jobsRouter)
     }
 
     start() {
