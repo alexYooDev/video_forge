@@ -7,7 +7,7 @@ const { performance } = require('perf_hooks');
 
 // Configuration
 const CONFIG = {
-  API_BASE: 'http://localhost:8000/api',
+  API_BASE: `${process.env.APP_BASE_URL}/api`,
   CONCURRENT_JOBS: 4, // Number of simultaneous jobs
   DURATION_MINUTES: 6, // Run for 6 minutes
   JOB_INTERVAL_MS: 2000, // Submit new job every 2 seconds

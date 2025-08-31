@@ -15,8 +15,8 @@
    ```
 
 4. **Access the application:**
-   - Frontend: http://localhost:3000
-   - Backend API: http://localhost:8000
+   - Frontend: http://localhost:3000 # dev
+   - Backend API: http://localhost:8000 # dev
    - Database: localhost:3306
 
 ## Environment Configuration
