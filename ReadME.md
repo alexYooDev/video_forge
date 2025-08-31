@@ -1,6 +1,6 @@
 ## Introduction to VideoForge
 
-Public-Domain Video Transcoder Web App is a cloud-deployed REST API service that enables users to search legally available public-domain or royalty-free videos, and transform them into ready-to-use media assets. Unlike existing stock repositories such as Pexels or Pixabay, which only provide video downloads, this application focuses on media transformation: transcoding into multiple resolutions, generating GIF snippets, building thumbnail strips, and applying creative filters. By combining content discovery with CPU-intensive processing, the system demonstrates scalable media workflows and offers unique value beyond simple content hosting.
+Public-Domain Video Transcoder Web App is a cloud-deployed REST API service that enables users to search legally available public-domain or royalty-free videos, and transform them into ready-to-use media assets. Unlike existing stock repositories such as Pexels or Pixabay, which only provide video downloads, this application focuses on media transformation: transcoding into multiple resolutions. By combining content discovery with CPU-intensive processing, the system demonstrates scalable media workflows and offers unique value beyond simple content hosting.
 
 ## Requirements Analysis
 
@@ -11,25 +11,15 @@ Public-Domain Video Transcoder Web App is a cloud-deployed REST API service that
 
 *** Video Search & Selection ***
 
-- Users can search public video sources (e.g., Pexels, Pixabay, Internet Archive).
+- Users can search public video sources (Pixabay).
 
-- Results show metadata: title, preview image, duration, license info.
+- Results show metadata: duration, license info, etc.
 
 - Users select a clip to process.
 
 *** Video Processing (CPU-intensive) ***
 
 - Users can request transcoding into multiple resolutions (1080p, 720p, 480p).
-
-- Users can request GIF snippet generation (with start time & duration).
-
-- Users can request extra transformations:
-
-*** Thumbnail strip ***
-
-- Black-and-white or sepia filter
-
-- Montage (combine multiple selected clips)
 
 *** Job Management ***
 
