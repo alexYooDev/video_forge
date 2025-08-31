@@ -19,10 +19,7 @@ class App {
 
       this.app.use(
         cors({
-          origin:
-            process.env.NODE_ENV === 'production'
-              ? ['http://13.210.68.108:3000'] // production url
-              : ['http://localhost:3000'], // React client url
+          origin: ['http://13.210.68.108:3000', 'http://localhost:3000'],
           credentials: true,
         })
       );

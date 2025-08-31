@@ -1,9 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL =
-  process.env.NODE_ENV === 'production'
-    ? 'http://13.210.68.108:8000/api'
-    : 'http://localhost:8000/api/';
+const API_BASE_URL = `${process.env.API_BASE_URL}/api`;
 
 const api = axios.create({
 baseURL: API_BASE_URL,

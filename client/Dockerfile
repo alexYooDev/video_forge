@@ -3,6 +3,10 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 COPY . .
+
+# Set environment variable for React build
+ENV API_BASE_URL=http://13.210.68.108:8000
+
 RUN npm run build
 
 # Production stage with Nginx
