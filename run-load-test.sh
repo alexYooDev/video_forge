@@ -29,12 +29,8 @@ if ! docker ps | grep -q videoforge_server_dev; then
     sleep 30
 fi
 
-# Install load test dependencies
-echo -e "${BLUE}📦 Installing load test dependencies...${NC}"
-if [ ! -d "node_modules" ]; then
-    cp load-test-package.json package.json
-    npm install
-fi
+# Load test dependencies are already available in server package.json
+echo -e "${BLUE}📦 Load test dependencies ready (using server dependencies)...${NC}"
 
 # Restart server with higher concurrent job limit
 echo -e "${BLUE}🔄 Restarting server with optimized configuration for CPU load...${NC}"
@@ -46,8 +42,10 @@ sleep 15
 # Function to run CPU monitoring in background
 start_cpu_monitor() {
     echo -e "${BLUE}🖥️  Starting CPU monitor...${NC}"
-    node cpu-monitor.js > cpu-monitor.log 2>&1 &
+    cd server
+    npm run cpu-monitor > src/logs/cpu-monitor.log 2>&1 &
     CPU_MONITOR_PID=$!
+    cd ..
     echo "CPU Monitor PID: $CPU_MONITOR_PID"
 }
 
@@ -96,7 +94,9 @@ echo -e "${YELLOW}Press Ctrl+C to stop the test early${NC}"
 echo ""
 
 # Run the load test
-node load-test.js
+cd server
+npm run load-test
+cd ..
 
 # Stop CPU monitoring
 stop_cpu_monitor
@@ -110,16 +110,16 @@ echo -e "${BLUE}📊 Results Summary:${NC}"
 show_docker_stats
 
 # Show CPU monitoring results if available
-if [ -f "cpu-load-test.log" ]; then
+if [ -f "server/src/logs/cpu-load-test.log" ]; then
     echo -e "${BLUE}📈 CPU Usage Analysis:${NC}"
-    echo "Log file: cpu-load-test.log"
+    echo "Log file: server/src/logs/cpu-load-test.log"
     
     # Simple analysis of CPU usage
     if command -v awk > /dev/null; then
-        PEAK_CPU=$(tail -n +2 cpu-load-test.log | cut -d',' -f2 | sort -nr | head -1)
-        AVG_CPU=$(tail -n +2 cpu-load-test.log | cut -d',' -f2 | awk '{sum+=$1; n++} END {if(n>0) print sum/n; else print 0}')
-        HIGH_CPU_SAMPLES=$(tail -n +2 cpu-load-test.log | awk -F',' '$2 >= 80 {count++} END {print count+0}')
-        TOTAL_SAMPLES=$(tail -n +2 cpu-load-test.log | wc -l)
+        PEAK_CPU=$(tail -n +2 server/src/logs/cpu-load-test.log | cut -d',' -f2 | sort -nr | head -1)
+        AVG_CPU=$(tail -n +2 server/src/logs/cpu-load-test.log | cut -d',' -f2 | awk '{sum+=$1; n++} END {if(n>0) print sum/n; else print 0}')
+        HIGH_CPU_SAMPLES=$(tail -n +2 server/src/logs/cpu-load-test.log | awk -F',' '$2 >= 80 {count++} END {print count+0}')
+        TOTAL_SAMPLES=$(tail -n +2 server/src/logs/cpu-load-test.log | wc -l)
         
         echo "Peak CPU Usage: ${PEAK_CPU}%"
         echo "Average CPU Usage: ${AVG_CPU}%"
@@ -135,9 +135,9 @@ fi
 
 echo ""
 echo -e "${BLUE}📁 Generated Files:${NC}"
-echo "- load-test.js (Load testing script)"
-echo "- cpu-monitor.js (CPU monitoring tool)"  
-echo "- cpu-monitor.log (CPU monitor output)"
-echo "- cpu-load-test.log (Detailed CPU usage data)"
+echo "- server/src/scripts/load-test.js (Load testing script)"
+echo "- server/src/scripts/cpu-monitor.js (CPU monitoring tool)"  
+echo "- server/src/logs/cpu-monitor.log (CPU monitor output)"
+echo "- server/src/logs/cpu-load-test.log (Detailed CPU usage data)"
 echo ""
 echo -e "${GREEN}🏁 Load test runner completed!${NC}"

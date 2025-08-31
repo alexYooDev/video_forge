@@ -6,7 +6,10 @@
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "test": "jest",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "load-test": "node src/scripts/load-test.js",
+    "cpu-monitor": "node src/scripts/cpu-monitor.js",
+    "setup-videos": "node src/scripts/create-test-videos.js"
   },
   "keywords": [],
   "author": "",

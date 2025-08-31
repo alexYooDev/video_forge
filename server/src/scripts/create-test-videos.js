@@ -52,7 +52,7 @@ async function downloadVideo(videoInfo, outputDir) {
 }
 
 async function createTestVideos() {
-  const outputDir = path.join(__dirname, 'test-videos');
+  const outputDir = path.join(__dirname, '../data/test-videos');
   
   // Create output directory
   if (!fs.existsSync(outputDir)) {

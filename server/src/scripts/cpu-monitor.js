@@ -7,7 +7,7 @@ const path = require('path');
 class CPUMonitor {
   constructor(options = {}) {
     this.interval = options.interval || 5000; // 5 seconds default
-    this.logFile = options.logFile || 'cpu-usage.log';
+    this.logFile = options.logFile || path.join(__dirname, '../logs/cpu-usage.log');
     this.targetUsage = options.targetUsage || 80; // 80% target
     this.running = false;
     this.stats = {
@@ -193,7 +193,7 @@ if (require.main === module) {
   const monitor = new CPUMonitor({
     interval: 5000, // 5 seconds
     targetUsage: 80, // 80%
-    logFile: 'cpu-load-test.log'
+    logFile: path.join(__dirname, '../logs/cpu-load-test.log')
   });
   
   monitor.start();
