@@ -3,6 +3,8 @@ const helmet = require('helmet');
 const cors = require('cors');
 const morgan = require('morgan');
 
+require('dotenv').config();
+
 class App {
     constructor () {
         this.app = express();
@@ -19,7 +21,7 @@ class App {
         cors({
           origin:
             process.env.NODE_ENV === 'production'
-              ? [''] // production url
+              ? ['http://54.252.242.150:3000'] // production url
               : ['http://localhost:3000'], // React client url
           credentials: true,
         })

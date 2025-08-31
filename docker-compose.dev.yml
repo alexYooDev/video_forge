@@ -38,13 +38,13 @@ services:
       DB_NAME: ${DB_NAME:-video_forge}
       DB_USER: ${DB_USER:-video_user}
       DB_PASSWORD: ${DB_PASSWORD:-videopassword}
-      JWT_SECRET: ${JWT_SECRET:-dev_jwt_secret_not_for_production}
+      JWT_SECRET: ${JWT_SECRET:-v8CH5wbdp9iPJHyBXQA2a8ALW58QJ9Ek}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
       PROCESSING_INPUT_DIR: /app/data/inputs
       PROCESSING_OUTPUT_DIR: /app/data/outputs
       PROCESSING_TEMP_DIR: /app/data/temp
       MAX_CONCURRENT_JOBS: ${MAX_CONCURRENT_JOBS:-6}
-      PIXABAY_API_KEY: ${PIXABAY_API_KEY:-your_pixabay_api_key}
+      PIXABAY_API_KEY: ${PIXABAY_API_KEY:-51815028-d9f2434e9b26002e4b2bd4fa4}
       
     volumes:
       # Mount source code for development
