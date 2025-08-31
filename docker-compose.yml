@@ -26,7 +26,7 @@ services:
 
   # Server Service
   server:
-    image: 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com/12159069-video-forge:latest
+    build: ./server
     container_name: videoforge_server
     restart: unless-stopped
     environment:
@@ -43,7 +43,7 @@ services:
       PROCESSING_OUTPUT_DIR: /app/data/outputs
       PROCESSING_TEMP_DIR: /app/data/temp
       MAX_CONCURRENT_JOBS: ${MAX_CONCURRENT_JOBS:-2}
-      BASE_APP_URL: ${BASE_APP_URL:-http://13.210.68.108:8000}
+      BASE_APP_URL: ${BASE_APP_URL:-http://16.176.228.63:8000}
       PIXABAY_API_KEY: ${PIXABAY_API_KEY:-51815028-d9f2434e9b26002e4b2bd4fa4}
     volumes:
       - server_data:/app/data
@@ -58,14 +58,14 @@ services:
       database:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://13.210.68.108:8000/api/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
 
   # Client Service
   client:
-    image: 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com/12159069-video-forge-client:latest
+    build: ./client
     container_name: videoforge_client
     restart: unless-stopped
     networks:
@@ -75,7 +75,7 @@ services:
     depends_on:
       - server
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://13.210.68.108:80"]
+      test: ["CMD", "curl", "-f", "http://localhost:80"]
       interval: 30s
       timeout: 10s
       retries: 3

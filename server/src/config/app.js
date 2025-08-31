@@ -19,7 +19,7 @@ class App {
 
       this.app.use(
         cors({
-          origin: ['http://13.210.68.108:3000', 'http://localhost:3000'],
+          origin: ['http://16.176.228.63:3000', 'http://localhost:3000'],
           credentials: true,
         })
       );
