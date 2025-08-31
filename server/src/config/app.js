@@ -44,7 +44,12 @@ class App {
       const jobsRouter = require('../routes/jobsRouter');
 
       this.app.use('/api/auth', authRouter);
-      this.app.use('/api/jobs', jobsRouter)
+      this.app.use('/api/jobs', jobsRouter);
+      
+      // Health check endpoint
+      this.app.get('/api/health', (req, res) => {
+        res.status(200).json({ status: 'OK', timestamp: new Date().toISOString() });
+      });
     }
 
     start() {
