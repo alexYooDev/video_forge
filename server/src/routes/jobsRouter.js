@@ -11,7 +11,6 @@ router.post('/', jobController.createJob);
 router.get('/stats', jobController.getUserStats);
 router.get('/process-stats', jobController.getProcessingStatus);
 // load testing purpose
-router.post('/process-sample', jobController.processSample);
 
 
 // video processing

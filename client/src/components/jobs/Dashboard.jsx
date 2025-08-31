@@ -7,7 +7,6 @@ import { useLocation } from 'react-router-dom';
 const Dashboard = () => {
   const {
     createJob,
-    createSampleJob,
     stats,
     loading: jobsLoading,
     refetch

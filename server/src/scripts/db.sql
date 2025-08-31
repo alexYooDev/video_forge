@@ -30,9 +30,4 @@ CREATE TABLE IF NOT EXISTS media_assets (
   INDEX idx_asset_type (asset_type)
 );
 
-INSERT INTO users (email, password) VALUES
-('user@test.com', '$2b$10$rQ8S.ZfF5YZQQyV9r6p6sON7F3.5xVJqGf0LPCnUXvSqD7.6yW5Xy')
-ON DUPLICATE KEY UPDATE email=email;
-
 SELECT 'Database setup complete.' as status;
-SELECT * FROM users;

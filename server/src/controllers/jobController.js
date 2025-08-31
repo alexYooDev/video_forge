@@ -200,23 +200,6 @@ class JobController {
             next(err);
         }
     }
-
-    async processSample(req, res, next) {
-        try {
-            const sampleJob = {
-              inputSource: process.env.SAMPLE_VIDEO_URL,
-              outputFormats: ['720p', '480p', 'gif'], // multiple formats for CPU intensive jobs
-            };
-
-            console.log(`Creating sample job for load testing (user: ${req.user.id}`);
-            const job = await jobService.createJob(req.user.id, sampleJob);
-
-
-            res.status(201).json({data: job, message: 'Sample processing job created'})
-        } catch(err) {
-            next(err);
-        }
-    }
 }
 
 module.exports = new JobController();
