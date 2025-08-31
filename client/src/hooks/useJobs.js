@@ -40,15 +40,6 @@ export const useJobs = (autoRefresh = true) => {
     }
   };
 
-  const createSampleJob = async () => {
-    try {
-      const response = await jobsService.createSampleJob();
-      setJobs((prev) => [response.data, ...prev]);
-      return { success: true, data: response.data };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  };
 
   const deleteJob = async (jobId) => {
     try {
@@ -99,7 +90,6 @@ export const useJobs = (autoRefresh = true) => {
     error,
     stats,
     createJob,
-    createSampleJob,
     deleteJob,
     refreshJob,
     refetch: fetchJobs,

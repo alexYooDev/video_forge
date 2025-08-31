@@ -1,0 +1,104 @@
+version: '3.8'
+
+services:
+  # Database Service
+  database:
+    image: mariadb:10.11
+    container_name: videoforge_db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: ${DB_NAME:-video_forge}
+      MYSQL_USER: ${DB_USER:-video_user}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-videopassword}
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./server/src/scripts/db.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - videoforge_network
+    ports:
+      - "${DB_PORT:-3306}:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD:-rootpassword}"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Server Service
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: videoforge_server
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 8000
+      DB_HOST: database
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME:-video_forge}
+      DB_USER: ${DB_USER:-video_user}
+      DB_PASSWORD: ${DB_PASSWORD:-videopassword}
+      JWT_SECRET: ${JWT_SECRET:-your_jwt_secret_key_here}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      PROCESSING_INPUT_DIR: /app/data/inputs
+      PROCESSING_OUTPUT_DIR: /app/data/outputs
+      PROCESSING_TEMP_DIR: /app/data/temp
+      MAX_CONCURRENT_JOBS: ${MAX_CONCURRENT_JOBS:-2}
+      PIXABAY_API_KEY: ${PIXABAY_API_KEY:-your_pixabay_api_key}
+    volumes:
+      - server_data:/app/data
+      - video_inputs:/app/data/inputs
+      - video_outputs:/app/data/outputs
+      - video_temp:/app/data/temp
+    networks:
+      - videoforge_network
+    ports:
+      - "${SERVER_PORT:-8000}:8000"
+    depends_on:
+      database:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://54.252.242.150:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Client Service
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+      args:
+        - REACT_APP_API_URL=http://54.252.242.150:${SERVER_PORT:-8000}
+        - REACT_APP_PIXABAY_API_KEY=${PIXABAY_API_KEY:-your_pixabay_api_key}
+        - REACT_APP_PIXABAY_BASE_URL=${PIXABAY_BASE_URL:-https://pixabay.com/api/videos/}
+    container_name: videoforge_client
+    restart: unless-stopped
+    networks:
+      - videoforge_network
+    ports:
+      - "${CLIENT_PORT:-3000}:80"
+    depends_on:
+      - server
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://54.252.242.150:80"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  videoforge_network:
+    driver: bridge
+
+volumes:
+  db_data:
+    driver: local
+  server_data:
+    driver: local
+  video_inputs:
+    driver: local
+  video_outputs:
+    driver: local
+  video_temp:
+    driver: local

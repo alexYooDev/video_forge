@@ -70,10 +70,10 @@ class JobService {
 
         const pageNum = Math.max(1, parseInt(page));
         const limitNum = Math.min(50, Math.max(1, parseInt(limit)));
-        const offset = (pageNum -1) * limitNum;
+        const offset = (pageNum - 1) * limitNum;
 
         let where = 'WHERE user_id = ?';
-        let params = [userId];
+        let params = [parseInt(userId)];
 
         if (status && Object.values(JOB_STATUS).includes(status)) {
             where += ' AND status = ?';
@@ -87,27 +87,32 @@ class JobService {
     
         const countQuery = `SELECT COUNT(*) as total FROM jobs ${where}`;
         const countResult = await database.query(countQuery, params);
-        const total = countResult[0].total;
+        const total = parseInt(countResult[0].total);
 
         const jobsQuery = `
-            SELECT 
-                j.*,
-                CASE 
-                WHEN j.status = 'COMPLETED' THEN 
-                    (SELECT COUNT(*) FROM media_assets WHERE job_id = j.id)
-                ELSE 0 
-                END as asset_count
+            SELECT j.*
             FROM jobs j 
             ${where} 
             ORDER BY j.${safeSortBy} ${safeSortOrder} 
             LIMIT ? OFFSET ?
         `;
-
-        const jobs = await database.query(jobsQuery, [
-          ...params,
-          limitNum,
-          offset,
-        ]);
+        
+        const queryParams = [...params, limitNum, offset];
+        
+        const jobs = await database.query(jobsQuery, queryParams);
+        
+        // Then add asset counts for completed jobs
+        for (let job of jobs) {
+            if (job.status === 'COMPLETED') {
+                const assetCountResult = await database.query(
+                    'SELECT COUNT(*) as count FROM media_assets WHERE job_id = ?',
+                    [job.id]
+                );
+                job.asset_count = assetCountResult[0].count;
+            } else {
+                job.asset_count = 0;
+            }
+        }
 
         return {
             jobs,
@@ -211,7 +216,7 @@ class JobService {
         stats.forEach(stat => {
             statsObj[stat.status] = { 
                 count : parseInt(stat.count),
-                avg_progres: Math.round(stat.avg_progress || 0)
+                avg_progress: Math.round(stat.avg_progress || 0)
             };
         });
 

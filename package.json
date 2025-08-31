@@ -1,0 +1,13 @@
+{
+  "name": "videoforge-load-test",
+  "version": "1.0.0",
+  "description": "Load testing tools for VideoForge CPU intensive video processing",
+  "scripts": {
+    "load-test": "node load-test.js",
+    "cpu-monitor": "node cpu-monitor.js",
+    "setup-videos": "node create-test-videos.js"
+  },
+  "dependencies": {
+    "axios": "^1.11.0"
+  }
+}

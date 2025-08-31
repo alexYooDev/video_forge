@@ -2,9 +2,11 @@ import React from 'react';
 import { useAuthContext } from '../../context/AuthProvider';
 import Button from '../ui/Button';
 import { Link } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 
 const Header = () => {
   const { user, logout } = useAuthContext();
+  const location = useLocation();
 
   const handleLogout = async () => {
     if (window.confirm('Are you sure you want to sign out?')) {
@@ -42,22 +44,30 @@ const Header = () => {
           <nav className='hidden md:flex space-x-8'>
             <Link
               to='/'
-              className='text-gray-900 hover:text-primary-600 px-3 py-2 rounded-md text-sm font-medium'
+              className={`${
+                location.pathname === '/' ? 'text-gray-900' : 'text-gray-500'
+              } hover:text-primary-600 px-3 py-2 rounded-md text-sm font-medium`}
             >
               Dashboard
             </Link>
             <Link
               to='/search-video'
-              className='text-gray-500 hover:text-primary-600 px-3 py-2 rounded-md text-sm font-medium'
+              className={`${
+                location.pathname === '/search-video'
+                  ? 'text-gray-900'
+                  : 'text-gray-500'
+              } hover:text-primary-600 px-3 py-2 rounded-md text-sm font-medium`}
             >
               Search videos
             </Link>
-            {/* <Link
+            <Link
               to='/jobs'
-              className='text-gray-500 hover:text-primary-600 px-3 py-2 rounded-md text-sm font-medium'
+              className={`${
+                location.pathname === '/jobs' ? 'text-gray-900' : 'text-gray-500'
+              } hover:text-primary-600 px-3 py-2 rounded-md text-sm font-medium`}
             >
-              Jobs
-            </Link> */}
+              Transcoded List
+            </Link>
           </nav>
 
           {/* User Menu */}

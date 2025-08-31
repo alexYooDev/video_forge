@@ -75,20 +75,10 @@ export const jobsService = {
       window.URL.revokeObjectURL(url);
 
       return { success: true };
+      
     } catch (error) {
       const message =
         error.response?.data?.message || 'Failed to download asset';
-      throw new Error(message);
-    }
-  },
-
-  async createSampleJob() {
-    try {
-      const response = await api.post('/jobs/process-sample');
-      return response.data;
-    } catch (error) {
-      const message =
-        error.response?.data?.message || 'Failed to create sample job';
       throw new Error(message);
     }
   },

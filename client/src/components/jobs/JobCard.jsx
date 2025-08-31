@@ -15,6 +15,8 @@ const JobCard = ({ job, onDelete, onRefresh }) => {
   const [loadingAssets, setLoadingAssets] = useState(false);
   const [showAssets, setShowAssets] = useState(false);
   const [downloadingAsset, setDownloadingAsset] = useState(null);
+  
+  const [isDownloaded, setIsDownloaded] = useState([]);
 
   const loadAssets = async () => {
     if (job.status !== 'COMPLETED') return;
@@ -46,6 +48,9 @@ const JobCard = ({ job, onDelete, onRefresh }) => {
       }_${asset.asset_type.toLowerCase()}.${extension}`;
 
       await jobsService.downloadAsset(job.id, asset.id, filename);
+
+      setIsDownloaded([...isDownloaded, asset.id ])
+
     } catch (error) {
       alert(`Download failed: ${error.message}`);
     } finally {
@@ -182,7 +187,7 @@ const JobCard = ({ job, onDelete, onRefresh }) => {
                       loading={downloadingAsset === asset.id}
                       className='ml-3'
                     >
-                      Download
+                     { isDownloaded.includes(asset.id) ? 'Downloaded' : 'Download' }
                     </Button>
                   </div>
                 ))}

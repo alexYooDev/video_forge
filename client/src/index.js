@@ -7,13 +7,11 @@ import reportWebVitals from './reportWebVitals';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 
 import { VideoProvider } from './context/VideoContext';
-import VideoListPage from './pages/VideoListPage';
-
 import { AuthProvider } from './context/AuthProvider';
 
 import Header from './components/layout/Header';
 import JobList from './components/jobs/JobList';
-import SearchBar from './components/search/SearchBar';
+import SearchVideo from './components/search/SearchVideo';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 
@@ -26,7 +24,7 @@ root.render(
         <Routes>
           <Route path='/' element={<App/>}/>
           <Route path='/jobs' element={<JobList/>} />
-          <Route path='/search-video' element={<SearchBar/>} />
+          <Route path='/search-video' element={<SearchVideo/>} />
         </Routes>
       </VideoProvider>
     </BrowserRouter>

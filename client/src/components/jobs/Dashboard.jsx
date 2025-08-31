@@ -1,18 +1,30 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useJobs } from '../../hooks/useJobs';
 import JobForm from './JobForm';
-import JobList from './JobList';
 import Card from '../ui/Card';
-import Button from '../ui/Button';
 import { useLocation } from 'react-router-dom';
 
 const Dashboard = () => {
-  const { createJob, createSampleJob, stats, loading: jobsLoading } = useJobs();
+  const {
+    createJob,
+    createSampleJob,
+    stats,
+    loading: jobsLoading,
+    refetch
+  } = useJobs();
   const [creatingJob, setCreatingJob] = useState(false);
-  
+
   const location = useLocation();
 
-  const {videoUrl} = location.state || ''
+  const {videoUrl} = location.state || '';
+
+  useEffect(() => {
+    const updateStats = async () => {
+        await refetch();
+    }
+    updateStats();
+  }, [stats])
+
 
   const handleCreateJob = async (jobData) => {
     try {
@@ -23,25 +35,6 @@ const Dashboard = () => {
         alert(`Job created successfully! Job ID: ${result.data.id}`);
       } else {
         alert(`Failed to create job: ${result.error}`);
-      }
-    } catch (error) {
-      alert(`Error: ${error.message}`);
-    } finally {
-      setCreatingJob(false);
-    }
-  };
-
-  const handleCreateSampleJob = async () => {
-    try {
-      setCreatingJob(true);
-      const result = await createSampleJob();
-
-      if (result.success) {
-        alert(
-          `Sample job created! Job ID: ${result.data.id}\nThis will demonstrate CPU-intensive video processing.`
-        );
-      } else {
-        alert(`Failed to create sample job: ${result.error}`);
       }
     } catch (error) {
       alert(`Error: ${error.message}`);
@@ -130,32 +123,6 @@ const Dashboard = () => {
           </Card>
         </div>
       )}
-
-      {/* Quick Actions */}
-      <Card>
-        <div className='text-center'>
-          <h2 className='text-xl font-semibold text-gray-900 mb-6'>
-            Quick Actions
-          </h2>
-
-          <div className='flex flex-col sm:flex-row gap-4 justify-center max-w-2xl mx-auto'>
-            <Button
-              variant='outline'
-              size='lg'
-              onClick={handleCreateSampleJob}
-              loading={creatingJob}
-              className='flex-1'
-            >
-              {creatingJob ? 'Creating Sample...' : 'Quick Sample Job'}
-            </Button>
-          </div>
-
-          <p className='text-sm text-gray-500 mt-4'>
-            Create a custom job with your video URL, or try our sample job for
-            instant testing
-          </p>
-        </div>
-      </Card>
 
       {/* Job Creation Form */}
       <JobForm

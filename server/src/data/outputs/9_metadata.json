@@ -1,0 +1,17 @@
+{
+  "duration": 7.593333,
+  "filesize": 25190573,
+  "bitrate": 26539674,
+  "video": {
+    "codec": "h264",
+    "width": 2160,
+    "height": 3840,
+    "fps": 50,
+    "bitrate": 26528012
+  },
+  "audio": {
+    "codec": "aac",
+    "bitrate": 189779,
+    "sample_rate": 48000
+  }
+}

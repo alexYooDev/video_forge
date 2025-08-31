@@ -55,9 +55,8 @@ class Database {
         await this.connect();
       }
 
-      // Execute query using pool (automatically handles connection management)
-      const [rows, fields] = await this.pool.execute(sql, params);
-
+      // Use query() instead of execute() for better compatibility
+      const [rows, fields] = await this.pool.query(sql, params);
 
       return rows;
     } catch (error) {

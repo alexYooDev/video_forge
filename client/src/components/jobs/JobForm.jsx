@@ -102,13 +102,6 @@ const JobForm = ({ onSubmit, videoUrl, loading = false }) => {
                 errors.inputSource ? 'border-red-300' : 'border-gray-300'
               } px-3 py-2 text-sm focus:border-primary-500 focus:ring-primary-500`}
             />
-            <Button
-              type='submit'
-              variant='outline'
-              className='whitespace-nowrap'
-            >
-              Submit
-            </Button>
           </div>
           {errors.inputSource && (
             <p className='mt-1 text-sm text-red-600'>{errors.inputSource}</p>
@@ -123,12 +116,12 @@ const JobForm = ({ onSubmit, videoUrl, loading = false }) => {
           <label className='block text-sm font-medium text-gray-700 mb-3'>
             Output Formats
           </label>
-          <div className='grid grid-cols-2 sm:grid-cols-4 gap-3'>
+          <div className='grid grid-cols-3 sm:grid-cols-4 gap-3'>
             {SUPPORTED_FORMATS.map((format) => (
               <label
                 key={format}
                 className={`relative flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50 ${formData.outputFormats.includes(
-                  format ? 'bg-green-300' : 'bg-white-100'
+                  format ? 'bg-green-100' : 'bg-white-100'
                 )}`}
               >
                 <input
@@ -140,11 +133,11 @@ const JobForm = ({ onSubmit, videoUrl, loading = false }) => {
                 <div
                   className={`flex items-center justify-center w-full text-sm font-medium rounded-md py-2 px-3 ${
                     formData.outputFormats.includes(format)
-                      ? 'bg-primary-100 text-primary-800 border-primary-300'
+                      ? 'bg-green-100 text-primary-800 border-primary-300'
                       : 'bg-white text-gray-700 border-gray-300'
                   }`}
                 >
-                  {format === 'gif' ? 'GIF' : format}
+                  {format}
                 </div>
               </label>
             ))}
@@ -170,6 +163,7 @@ const JobForm = ({ onSubmit, videoUrl, loading = false }) => {
           </Button>
           <Button
             type='submit'
+            variant='outline'
             loading={loading}
             disabled={
               !formData.inputSource.trim() ||
@@ -205,7 +199,7 @@ const JobForm = ({ onSubmit, videoUrl, loading = false }) => {
             onClick={() =>
               setFormData({
                 inputSource: 'local-sample.mp4',
-                outputFormats: ['1080p','720p', '480p'],
+                outputFormats: ['1080p', '720p', '480p'],
               })
             }
           >

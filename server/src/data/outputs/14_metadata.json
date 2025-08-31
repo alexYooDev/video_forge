@@ -1,0 +1,13 @@
+{
+  "duration": 8.566667,
+  "filesize": 33655285,
+  "bitrate": 31429058,
+  "video": {
+    "codec": "h264",
+    "width": 3840,
+    "height": 2160,
+    "fps": 30,
+    "bitrate": 31426181
+  },
+  "audio": null
+}
