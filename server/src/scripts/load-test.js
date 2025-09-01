@@ -37,7 +37,7 @@ class LoadTester {
   async authenticate() {
     try {
       console.log('Authenticating...');
-      const response = await axios.post('http//:localhost:8000/api/auth/login', {
+      const response = await axios.post(`${process.env.APP_BASE_URL}/api/auth/login`, {
         username: 'testuser',
         email: 'test@example.com',
         password: 'testpass123',

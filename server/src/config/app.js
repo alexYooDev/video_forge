@@ -19,7 +19,7 @@ class App {
 
       this.app.use(
         cors({
-          origin: ['http://13.210.68.108:3000', 'http://localhost:3000'],
+          origin: [`${process.env.APP_BASE_URL}:3000`, 'http://localhost:3000'],
           credentials: true,
         })
       );

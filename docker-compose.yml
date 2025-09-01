@@ -58,7 +58,7 @@ services:
       database:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://13.210.68.108:8000/api/health"]
+      test: ["CMD", "curl", "-f", "http://54.252.173.224:8000/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -75,7 +75,7 @@ services:
     depends_on:
       - server
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://13.210.68.108:80"]
+      test: ["CMD", "curl", "-f", "http://54.252.173.224.108:80"]
       interval: 30s
       timeout: 10s
       retries: 3
