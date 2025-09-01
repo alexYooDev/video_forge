@@ -26,7 +26,7 @@ services:
 
   # Server Service
   server:
-    image: 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com/12159069-video-forge:latest
+    build: ./server
     container_name: videoforge_server
     restart: unless-stopped
     environment:
@@ -65,7 +65,7 @@ services:
 
   # Client Service
   client:
-    image: 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com/12159069-video-forge-client:latest
+    build: ./client
     container_name: videoforge_client
     restart: unless-stopped
     networks:
