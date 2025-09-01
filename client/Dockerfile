@@ -4,8 +4,7 @@ COPY package*.json ./
 RUN npm ci
 COPY . .
 
-# Set environment variable for React build
-ENV API_BASE_URL=http://16.176.228.63:8000
+ENV APP_BASE_URL=http://54.252.173.224:8000
 
 RUN npm run build
 

@@ -37,7 +37,7 @@ class LoadTester {
   async authenticate() {
     try {
       console.log('Authenticating...');
-      const response = await axios.post(`${CONFIG.API_BASE}/auth/login`, {
+      const response = await axios.post(`${process.env.APP_BASE_URL}/api/auth/login`, {
         username: 'testuser',
         email: 'test@example.com',
         password: 'testpass123',
@@ -50,6 +50,7 @@ class LoadTester {
       // Try to register if login fails
       try {
         console.log('Registering new user...');
+        console.log(`${CONFIG.API_BASE}/auth/register`);
         await axios.post(`${CONFIG.API_BASE}/auth/register`, {
           username: 'testuser',
           email: 'test@example.com',

@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = `${process.env.API_BASE_URL}/api`;
+const API_BASE_URL = `${process.env.APP_BASE_URL || 'http://server:8000'}/api`;
 
 const api = axios.create({
 baseURL: API_BASE_URL,
