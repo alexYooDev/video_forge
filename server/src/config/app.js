@@ -19,7 +19,12 @@ class App {
 
       this.app.use(
         cors({
-          origin: [`${process.env.APP_BASE_URL}:3000`, 'http://localhost:3000'],
+          origin: [
+            `http://${process.env.CLIENT_HOST || 'localhost'}:3000`,
+            `http://${process.env.CLIENT_HOST || 'localhost'}:80`,
+            'http://localhost:3000',
+            'http://localhost:80'
+          ],
           credentials: true,
         })
       );
@@ -50,7 +55,7 @@ class App {
     }
 
     start() {
-        this.app.listen(this.PORT, () => {
+        this.app.listen(this.PORT, '0.0.0.0', () => {
             console.log(`Server running on port ${process.env.APP_BASE_URL}:${this.PORT}`);
         })
     }

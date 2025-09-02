@@ -1,5 +1,5 @@
 # Node.js server Dockerfile
-FROM node:22-alpine
+FROM node:24-alpine
 
 # Install FFmpeg for video processing
 RUN apk add --no-cache ffmpeg

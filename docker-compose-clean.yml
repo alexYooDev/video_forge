@@ -69,7 +69,7 @@ services:
     container_name: videoforge_client
     restart: unless-stopped
     environment:
-      SERVER_HOST: ${SERVER_HOST:-server}
+      SERVER_HOST: ${SERVER_HOST:-3.106.192.215}
     networks:
       - videoforge_network
     ports:
