@@ -1,16 +1,17 @@
-import React from 'react';
 import { useAuthContext } from '../../context/AuthProvider';
 import Button from '../ui/Button';
 import { Link } from 'react-router-dom';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 const Header = () => {
   const { user, logout } = useAuthContext();
   const location = useLocation();
+  const navigate = useNavigate();
 
   const handleLogout = async () => {
     if (window.confirm('Are you sure you want to sign out?')) {
       await logout();
+      navigate('/');
     }
   };
 
@@ -41,12 +42,12 @@ const Header = () => {
           </div>
 
           {/* Navigation */}
-          <nav className='hidden md:flex space-x-8'>
+          <nav className='flex space-x-4 sm:space-x-8'>
             <Link
               to='/'
               className={`${
                 location.pathname === '/' ? 'text-gray-900' : 'text-gray-500'
-              } hover:text-primary-600 px-3 py-2 rounded-md text-sm font-medium`}
+              } hover:text-primary-600 px-2 sm:px-3 py-2 rounded-md text-sm font-medium`}
             >
               Dashboard
             </Link>
@@ -56,7 +57,7 @@ const Header = () => {
                 location.pathname === '/search-video'
                   ? 'text-gray-900'
                   : 'text-gray-500'
-              } hover:text-primary-600 px-3 py-2 rounded-md text-sm font-medium`}
+              } hover:text-primary-600 px-2 sm:px-3 py-2 rounded-md text-sm font-medium`}
             >
               Search videos
             </Link>
@@ -64,7 +65,7 @@ const Header = () => {
               to='/jobs'
               className={`${
                 location.pathname === '/jobs' ? 'text-gray-900' : 'text-gray-500'
-              } hover:text-primary-600 px-3 py-2 rounded-md text-sm font-medium`}
+              } hover:text-primary-600 px-2 sm:px-3 py-2 rounded-md text-sm font-medium`}
             >
               Transcoded List
             </Link>
@@ -82,14 +83,14 @@ const Header = () => {
                 </span>
               </div>
               <div className='w-8 h-8 bg-primary-600 rounded-full flex items-center justify-center'>
-                <span className='text-sm font-medium text-white'>
-                  {user?.email?.charAt(0).toUpperCase()}
+                <span className='text-sm font-medium text-black'>
+                  {user?.email?.split('@')[0]}
                 </span>
               </div>
             </div>
-            <Button variant='outline' size='sm' onClick={handleLogout}>
+            {user && <Button variant='outline' size='sm' onClick={handleLogout}>
               Sign out
-            </Button>
+            </Button>}
           </div>
         </div>
       </div>

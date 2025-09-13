@@ -2,14 +2,20 @@ import React, { useEffect, useState } from 'react';
 import { SUPPORTED_FORMATS } from '../../utils/constants';
 import Button from '../ui/Button';
 import Card from '../ui/Card';
+import api from '../../services/api';
+import { useNavigate } from 'react-router-dom';
 
 const JobForm = ({ onSubmit, videoUrl, loading = false }) => {
+
+  const navigate = useNavigate();
+
   const [formData, setFormData] = useState({
     inputSource: '',
     outputFormats: ['720p'],
   });
 
   const [errors, setErrors] = useState({});
+  const [loadTestRunning, setLoadTestRunning] = useState(false);
 
   useEffect(() => {
     if (videoUrl && videoUrl !== '') {
@@ -77,6 +83,27 @@ const JobForm = ({ onSubmit, videoUrl, loading = false }) => {
     });
   };
 
+  const handleLoadTest = async () => {
+    setLoadTestRunning(true);
+    try {
+      // Start load test and CPU monitoring
+      const response = await api.post('/jobs/load-test', {
+        concurrent: 5,
+        videoUrl: 'local-sample.mp4',
+        formats: ['1080p', '720p', '480p']
+      });
+      
+      if (response.data.success) {
+        alert('Load test started! Check CPU monitoring for results.');
+      }
+    } catch (error) {
+      console.error('Load test failed:', error);
+      alert('Load test failed: ' + (error.response?.data?.message || error.message));
+    } finally {
+      setLoadTestRunning(false);
+    }
+  };
+
   return (
     <Card>
       <h3 className='text-lg font-medium text-gray-900 mb-6'>Create New Job</h3>
@@ -116,13 +143,11 @@ const JobForm = ({ onSubmit, videoUrl, loading = false }) => {
           <label className='block text-sm font-medium text-gray-700 mb-3'>
             Output Formats
           </label>
-          <div className='grid grid-cols-3 sm:grid-cols-4 gap-3'>
+          <div className='flex gap-3'>
             {SUPPORTED_FORMATS.map((format) => (
               <label
                 key={format}
-                className={`relative flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50 ${formData.outputFormats.includes(
-                  format ? 'bg-green-100' : 'bg-white-100'
-                )}`}
+                className={`flex-1 cursor-pointer`}
               >
                 <input
                   type='checkbox'
@@ -131,10 +156,10 @@ const JobForm = ({ onSubmit, videoUrl, loading = false }) => {
                   className='sr-only'
                 />
                 <div
-                  className={`flex items-center justify-center w-full text-sm font-medium rounded-md py-2 px-3 ${
+                  className={`flex items-center justify-center text-sm font-medium rounded-lg py-3 px-4 border transition-colors ${
                     formData.outputFormats.includes(format)
-                      ? 'bg-green-100 text-primary-800 border-primary-300'
-                      : 'bg-white text-gray-700 border-gray-300'
+                      ? 'bg-green-100 text-green-800 border-green-300'
+                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
                   }`}
                 >
                   {format}
@@ -180,7 +205,7 @@ const JobForm = ({ onSubmit, videoUrl, loading = false }) => {
         <h4 className='text-sm font-medium text-gray-900 mb-3'>
           Quick Actions
         </h4>
-        <div className='flex space-x-3'>
+        <div className='flex flex-wrap gap-3'>
           <Button
             size='sm'
             variant='outline'
@@ -204,6 +229,15 @@ const JobForm = ({ onSubmit, videoUrl, loading = false }) => {
             }
           >
             Multi-Format Test
+          </Button>
+          <Button
+            size='sm'
+            variant='danger'
+            loading={loadTestRunning}
+            onClick={handleLoadTest}
+            disabled={loadTestRunning}
+          >
+            {loadTestRunning ? 'Running Load Test...' : 'Load Test & CPU Monitor'}
           </Button>
         </div>
       </div>

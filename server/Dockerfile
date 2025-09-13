@@ -1,8 +1,8 @@
 # Node.js server Dockerfile
 FROM node:24-alpine
 
-# Install FFmpeg for video processing
-RUN apk add --no-cache ffmpeg
+# Install FFmpeg for video processing and htop for CPU monitoring
+RUN apk add --no-cache ffmpeg htop
 
 # Create app directory
 WORKDIR /app

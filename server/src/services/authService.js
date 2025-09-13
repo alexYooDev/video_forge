@@ -1,34 +1,37 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const database = require('../config/database.js');
+const { User } = require('../models/index');
+const { UnauthorizedError, NotFoundError, ConflictError } = require('../utils/errors');
 
 class AuthService {
-    async login(email, password) {
-        const users = await database.query('SELECT id, email, password FROM users WHERE email = ?', [email]);
-        
-        if (users.length === 0) {
-            throw new Error('Invalid email or password', 401);
-        }
+    // DRY: Extract user object creation (used in login, register, updateUserRole)
+    formatUserResponse(user) {
+        return {
+            id: user.id,
+            username: user.username,
+            email: user.email,
+            role: user.role || 'user'
+        };
+    }
 
+    async login(email, password) {
+        const user = await User.findOne({ where: { email } });
         
-        const user = users[0];
+        if (!user) {
+            throw UnauthorizedError('Invalid email or password');
+        }
         
         const isPasswordValid = await bcrypt.compare(password, user.password);
         
         if (!isPasswordValid) {
-            throw new Error('Invalid email or passoword', 401);
+            throw UnauthorizedError('Invalid email or password');
         }
 
-        const token = this.generateToken({
-            id: user.id,
-            email: user.email,
-        });
+        const userResponse = this.formatUserResponse(user);
+        const token = this.generateToken(userResponse);
 
         return {
-            user: {
-                id: user.id,
-                email: user.email
-            },
+            user: userResponse,
             token
         };
     }
@@ -36,9 +39,9 @@ class AuthService {
     generateToken(payload) {
         return jwt.sign(
             payload,
-            process.env.JWT_SECRET,
+            process.env.JWT_SECRET || 'fallback-secret',
             {
-                expiresIn: '12h',
+                expiresIn: process.env.JWT_EXPIRES_IN || '12h',
                 issuer: 'Video-Forge-api'
             }
         )
@@ -49,52 +52,84 @@ class AuthService {
             return jwt.verify(token, process.env.JWT_SECRET);
         } catch(err) {
             if (err.name === 'TokenExpiredError') {
-                throw new Error('Token expired', 401);
+                throw UnauthorizedError('Token expired');
             }
-            throw new Error('Invalid token', 401);
+            throw UnauthorizedError('Invalid token');
         }
     }
     
     async getUserById(userId) {
-        const users = await database.query(
-            'SELECT id, email, created_at FROM users WHERE id = ?',
-            [userId]
-        );
+        const user = await User.findByPk(userId, {
+            attributes: ['id', 'username', 'email', 'role', 'created_at']
+        });
 
-        if (users.length === 0) {
-            throw new Error('User not found', 404);
+        if (!user) {
+            throw NotFoundError('User not found');
         }
-        return users[0];
+        return user;
     }
 
-    async register(email, password) {
-        const existingUsers = await database.query(
-            'SELECT id FROM users WHERE email = ?',
-            [email]
-        );
+    async register(email, password, username) {
+        // Check if user already exists by email
+        const existingByEmail = await User.findOne({ where: { email } });
+        if (existingByEmail) {
+            throw ConflictError('User with this email already exists');
+        }
 
-        if (existingUsers.length > 0)
-        {
-            throw new Error('User already exists', 409);
+        // Check if username is unique (now required)
+        const existingByUsername = await User.findOne({ where: { username } });
+        if (existingByUsername) {
+            throw ConflictError('Username already taken');
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        const result = await database.query(
-            'INSERT INTO users (email, password) VALUES (?, ?)',
-            [email, hashedPassword]
-        );
-
-        const newUser = await this.getUserById(result.insertId);
-        const token = this.generateToken({
-            id: newUser.id,
-            email: newUser.email,
+        const newUser = await User.create({
+            username,
+            email,
+            password: hashedPassword
         });
 
+        const userResponse = this.formatUserResponse(newUser);
+        const token = this.generateToken(userResponse);
+
         return {
-            user: newUser,
+            user: userResponse,
             token
         };
+    }
+
+    async getAllUsers() {
+        const users = await User.findAll({
+            attributes: ['id', 'username', 'email', 'role', 'created_at'],
+            order: [['created_at', 'DESC']]
+        });
+        return users;
+    }
+
+    async deleteUser(userId) {
+        const result = await User.destroy({
+            where: { id: userId }
+        });
+        
+        if (result === 0) {
+            throw NotFoundError('User not found');
+        }
+        
+        return result;
+    }
+
+    async updateUserRole(userId, role) {
+        const [updatedRowsCount] = await User.update(
+            { role },
+            { where: { id: userId } }
+        );
+        
+        if (updatedRowsCount === 0) {
+            throw NotFoundError('User not found');
+        }
+        
+        return await this.getUserById(userId);
     }
 }
 

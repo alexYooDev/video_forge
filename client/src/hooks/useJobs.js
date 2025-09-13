@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { jobsService } from '../services/jobs';
 
 export const useJobs = (autoRefresh = true) => {
@@ -11,7 +11,8 @@ export const useJobs = (autoRefresh = true) => {
     try {
       setError(null);
       const response = await jobsService.getJobs(params);
-      setJobs(response.data || []);
+      // Fix format mismatch - server returns {jobs: [...], pagination: {...}}
+      setJobs(response.jobs || []);
     } catch (error) {
       setError(error.message);
       console.error('Failed to fetch jobs:', error);
@@ -23,18 +24,20 @@ export const useJobs = (autoRefresh = true) => {
   const fetchStats = async () => {
     try {
       const response = await jobsService.getJobStats();
-      setStats(response.data || {});
+      // Fix: Access the stats property from the response data
+      setStats(response.stats || {});
     } catch (error) {
       console.error('Failed to fetch stats:', error);
+      setStats({}); // Set empty object on error
     }
   };
 
   const createJob = async (jobData) => {
     try {
       const response = await jobsService.createJob(jobData);
-      // Add new job to the beginning of the list
-      setJobs((prev) => [response.data, ...prev]);
-      return { success: true, data: response.data };
+      // Add new job to the beginning of the list - fix format mismatch
+      setJobs((prev) => [response.job, ...prev]);
+      return { success: true, data: response.job };
     } catch (error) {
       return { success: false, error: error.message };
     }
@@ -43,7 +46,8 @@ export const useJobs = (autoRefresh = true) => {
 
   const deleteJob = async (jobId) => {
     try {
-      await jobsService.deleteJob(jobId);
+      const result = await jobsService.deleteJob(jobId);
+      console.log(result);
       setJobs((prev) => prev.filter((job) => job.id !== jobId));
       return { success: true };
     } catch (error) {
@@ -55,7 +59,7 @@ export const useJobs = (autoRefresh = true) => {
     try {
       const response = await jobsService.getJob(jobId);
       setJobs((prev) =>
-        prev.map((job) => (job.id === jobId ? response.data : job))
+        prev.map((job) => (job.id === jobId ? response.job : job))
       );
     } catch (error) {
       console.error('Failed to refresh job:', error);
@@ -84,6 +88,11 @@ export const useJobs = (autoRefresh = true) => {
     return () => clearInterval(interval);
   }, [jobs, autoRefresh]);
 
+  const refetchAll = useCallback(async () => {
+    await fetchJobs();
+    await fetchStats();
+  }, []);
+
   return {
     jobs,
     loading,
@@ -93,5 +102,6 @@ export const useJobs = (autoRefresh = true) => {
     deleteJob,
     refreshJob,
     refetch: fetchJobs,
+    refetchAll,
   };
 };

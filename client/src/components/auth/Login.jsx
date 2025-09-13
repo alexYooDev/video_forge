@@ -3,20 +3,24 @@ import { useAuthContext } from '../../context/AuthProvider';
 import Button from '../ui/Button';
 import Card from '../ui/Card';
 import { User, Mail, Lock, UserPlus, LogIn, Video } from 'lucide-react';
+import { authService } from '../../services/auth';
+import MFALogin from './MFALogin';
 
 const Login = () => {
   const [isRegisterMode, setIsRegisterMode] = useState(false);
   const [formData, setFormData] = useState({
-    email: isRegisterMode ? '' : 'user1@test.com', // Pre-filled for login testing
+    email: isRegisterMode ? '' : 'user1@test.com',
     password: isRegisterMode ? '' : 'password123',
+    username: '',
     confirmPassword: '',
   });
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [registerError, setRegisterError] = useState('');
   const [registerSuccess, setRegisterSuccess] = useState('');
+  const [mfaSession, setMfaSession] = useState(null);
 
-  const { login, error } = useAuthContext();
+  const { login, completeMFALogin, error } = useAuthContext();
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -34,6 +38,7 @@ const Login = () => {
     setFormData({
       email: isRegisterMode ? 'user1@test.com' : '',
       password: isRegisterMode ? 'password123' : '',
+      username: '',
       confirmPassword: '',
     });
     setRegisterError('');
@@ -41,8 +46,12 @@ const Login = () => {
   };
 
   const validateRegisterForm = () => {
-    if (!formData.email || !formData.password || !formData.confirmPassword) {
+    if (!formData.email || !formData.password || !formData.username || !formData.confirmPassword) {
       setRegisterError('All fields are required');
+      return false;
+    }
+    if (formData.username.length < 3) {
+      setRegisterError('Username must be at least 3 characters long');
       return false;
     }
     if (formData.password !== formData.confirmPassword) {
@@ -58,37 +67,20 @@ const Login = () => {
 
   const handleRegister = async (formData) => {
     try {
-      // Replace with your actual API endpoint
-      const response = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+      await authService.register(formData.email, formData.password, formData.username);
+      setRegisterSuccess('Account created successfully! You can now login.');
+      setTimeout(() => {
+        setIsRegisterMode(false);
+        setFormData({
           email: formData.email,
-          password: formData.password,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        setRegisterSuccess('Account created successfully! You can now login.');
-        setTimeout(() => {
-          setIsRegisterMode(false);
-          setFormData({
-            email: formData.email,
-            password: '',
-            confirmPassword: '',
-          });
-        }, 2000);
-        return { success: true };
-      } else {
-        setRegisterError(data.message || 'Registration failed');
-        return { success: false };
-      }
+          password: '',
+          username: '',
+          confirmPassword: '',
+        });
+      }, 2000);
+      return { success: true };
     } catch (error) {
-      setRegisterError('Network error. Please try again.');
+      setRegisterError(error.message);
       return { success: false };
     }
   };
@@ -108,6 +100,8 @@ const Login = () => {
         const result = await login(formData.email, formData.password);
         if (result.success) {
           console.log('Login successful!');
+        } else if (result.requiresMFA) {
+          setMfaSession(result.session);
         }
       }
     } catch (error) {
@@ -119,6 +113,25 @@ const Login = () => {
       setIsSubmitting(false);
     }
   };
+
+  const handleMFASuccess = async (result) => {
+    setMfaSession(null);
+    console.log('MFA login successful!');
+  };
+
+  const handleMFABack = () => {
+    setMfaSession(null);
+  };
+
+  if (mfaSession) {
+    return (
+      <MFALogin
+        session={mfaSession}
+        onSuccess={handleMFASuccess}
+        onBack={handleMFABack}
+      />
+    );
+  }
 
   return (
     <div className='min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-purple-50 py-12 px-4 sm:px-6 lg:px-8'>
@@ -227,6 +240,31 @@ const Login = () => {
               </div>
             </div>
 
+            {/* Username Field - Only for Register */}
+            {isRegisterMode && (
+              <div>
+                <label htmlFor='username' className='block text-sm font-medium text-gray-700 mb-2'>
+                  Username
+                </label>
+                <div className='relative'>
+                  <div className='absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none'>
+                    <User className='h-5 w-5 text-gray-400' />
+                  </div>
+                  <input
+                    id='username'
+                    name='username'
+                    type='text'
+                    autoComplete='username'
+                    required
+                    value={formData.username}
+                    onChange={handleInputChange}
+                    className='block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
+                    placeholder='Enter your username'
+                  />
+                </div>
+              </div>
+            )}
+
             {/* Password Field */}
             <div>
               <label htmlFor='password' className='block text-sm font-medium text-gray-700 mb-2'>
@@ -283,7 +321,7 @@ const Login = () => {
                 loading={isSubmitting}
                 disabled={
                   isRegisterMode 
-                    ? !formData.email || !formData.password || !formData.confirmPassword
+                    ? !formData.email || !formData.password || !formData.username || !formData.confirmPassword
                     : !formData.email || !formData.password
                 }
                 className='w-full font-semibold py-3 px-4 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed'

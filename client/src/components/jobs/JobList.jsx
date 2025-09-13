@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { useJobs } from '../../hooks/useJobs';
-import { JOB_STATUS } from '../../utils/constants';
+// import { JOB_STATUS } from '../../utils/constants';
 import JobCard from './JobCard';
 import Button from '../ui/Button';
 import Layout from '../layout/Layout';
+import SystemStats from '../ui/SystemStats';
 
 const JobList = () => {
   const { jobs, loading, error, deleteJob, refreshJob, refetch } = useJobs();
@@ -12,9 +13,14 @@ const JobList = () => {
   const [sortOrder, setSortOrder] = useState('DESC');
 
   const handleDeleteJob = async (jobId) => {
-    const result = await deleteJob(jobId);
-    if (!result.success) {
-      alert(`Failed to delete job: ${result.error}`);
+    try {
+      const result = await deleteJob(jobId);
+      console.log(result);
+      if (!result.success) {
+        alert(result.error);
+      }
+    } catch (error) {
+      alert(`Delete failed: ${error.message}`);
     }
   };
 
@@ -90,6 +96,13 @@ const JobList = () => {
             </Button>
           </div>
         </div>
+
+        {/* System Stats for Load Testing */}
+        {activeJobsCount > 0 && (
+          <div className='lg:max-w-md'>
+            <SystemStats />
+          </div>
+        )}
 
         {/* Filters */}
         <div className='bg-white rounded-lg shadow-sm border border-gray-200 p-4'>

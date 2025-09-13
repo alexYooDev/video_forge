@@ -1,5 +1,5 @@
 const express = require('express');
-const {authenticate} = require('../middleware/auth');
+const {authenticate, requireAuth} = require('../middleware/auth');
 const jobController = require('../controllers/jobController');
 
 const router = express.Router();
@@ -10,8 +10,14 @@ router.get('/', jobController.getAllJobs);
 router.post('/', jobController.createJob);
 router.get('/stats', jobController.getUserStats);
 router.get('/process-stats', jobController.getProcessingStatus);
+router.get('/events', jobController.getJobEvents);
 // load testing purpose
+router.post('/load-test', jobController.runLoadTest);
 
+// Admin routes
+router.get('/admin/stats', requireAuth('admin'), jobController.getAdminJobStats);
+router.get('/admin/all', requireAuth('admin'), jobController.getAllJobsAdmin);
+router.delete('/admin/:id', requireAuth('admin'), jobController.deleteJobAdmin);
 
 // video processing
 router.get('/:id', jobController.getJobById);

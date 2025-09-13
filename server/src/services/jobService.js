@@ -1,35 +1,46 @@
-const database = require('../config/database');
+const { Job, MediaAsset, User } = require('../models/index');
 const {JOB_STATUS, SUPPORTED_FORMATS} = require('../utils/constants');
-const VideoProcessingService = require('./videoProcessingService');
+const videoProcessingOrchestrator = require('./videoProcessingOrchestrator');
+const { ValidationError, NotFoundError, ForbiddenError, InternalServerError } = require('../utils/errors');
+const { Op } = require('sequelize');
 
 class JobService {
+    constructor() {
+        // Queue management properties
+        this.maxConcurrentJobs = parseInt(process.env.MAX_CONCURRENT_JOBS) || 2;
+        this.processingQueue = [];
+        this.currentJobs = 0;
+        
+        console.log(`Job service initialized: max concurrent jobs = ${this.maxConcurrentJobs}`);
+    }
     async createJob(userId, jobData) {
         const {inputSource, outputFormats = ['720p'] } = jobData;
 
         // Validate input source (basic validation for intial stage)
         if (!inputSource || inputSource.trim().length === 0) {
-            throw new Error("Input source is required");
+            throw new ValidationError("Input source is required");
         }
 
         const validFormats = outputFormats.filter(format => SUPPORTED_FORMATS.includes(format));
 
         if (validFormats.length === 0) {
-            throw new Error('At least one valid output format is required');
+            throw new ValidationError('At least one valid output format is required');
         }
 
         try {
             // Create job in db
-            const result = await database.query(
-                'INSERT INTO jobs (user_id, input_source, status, progress) VALUES (?, ?, ?, ?)',
-                [userId, inputSource.trim(), JOB_STATUS.PENDING, 0]
-            );
+            const job = await Job.create({
+                user_id: userId,
+                input_source: inputSource.trim(),
+                output_format: outputFormats.join(','),
+                status: JOB_STATUS.PENDING,
+                progress: 0
+            });
 
-            const jobId = result.insertId;
-            const job = await this.getJobById(jobId, userId);
+            const jobId = job.id;
 
-            console.log(`Video processing for job: ${jobId} started...`);
-
-            VideoProcessingService.processJob(jobId, outputFormats).catch(
+            const processingTask = videoProcessingOrchestrator.processJob(jobId, outputFormats);
+            this.addJobToQueue(processingTask.jobId, processingTask.processor).catch(
               (error) => {
                 console.error(
                   `Background processing failed for job: ${jobId}`,
@@ -38,25 +49,26 @@ class JobService {
               }
             );
 
-            return job;
+            return job.toJSON();
 
         } catch(err) {
-            throw new Error(`Failed to create job: ${err.message}`, 500);
+            throw new InternalServerError(`Failed to create job: ${err.message}`);
         }
     }
 
     async getJobById(jobId, userId) {
+        const job = await Job.findOne({
+            where: { 
+                id: jobId,
+                user_id: userId 
+            }
+        });
 
-        const jobs = await database.query(
-          'SELECT * FROM jobs WHERE id = ? AND user_id = ?',
-          [jobId, userId]
-        );
-
-        if (jobs.length === 0) {
-            throw new Error('Job not found');
+        if (!job) {
+            throw new NotFoundError('Job not found');
         }
 
-        return jobs[0];
+        return job.toJSON();
     }
 
     async getAllJobs(userId, options= {}) {
@@ -85,30 +97,29 @@ class JobService {
         const safeSortBy = allowedSortColumns.includes(sortBy) ? sortBy : 'created_at';
         const safeSortOrder = ['ASC', 'DESC'].includes(sortOrder.toUpperCase()) ? sortOrder.toUpperCase() : 'DESC';
     
-        const countQuery = `SELECT COUNT(*) as total FROM jobs ${where}`;
-        const countResult = await database.query(countQuery, params);
-        const total = parseInt(countResult[0].total);
+        let whereClause = { user_id: parseInt(userId) };
+        
+        if (status && Object.values(JOB_STATUS).includes(status)) {
+            whereClause.status = status;
+        }
 
-        const jobsQuery = `
-            SELECT j.*
-            FROM jobs j 
-            ${where} 
-            ORDER BY j.${safeSortBy} ${safeSortOrder} 
-            LIMIT ? OFFSET ?
-        `;
-        
-        const queryParams = [...params, limitNum, offset];
-        
-        const jobs = await database.query(jobsQuery, queryParams);
+        const total = await Job.count({ where: whereClause });
+
+        const jobs = await Job.findAll({
+            where: whereClause,
+            order: [[safeSortBy, safeSortOrder]],
+            limit: limitNum,
+            offset: offset,
+            raw: true
+        });
         
         // Then add asset counts for completed jobs
         for (let job of jobs) {
             if (job.status === 'COMPLETED') {
-                const assetCountResult = await database.query(
-                    'SELECT COUNT(*) as count FROM media_assets WHERE job_id = ?',
-                    [job.id]
-                );
-                job.asset_count = assetCountResult[0].count;
+                const assetCount = await MediaAsset.count({
+                    where: { job_id: job.id }
+                });
+                job.asset_count = assetCount;
             } else {
                 job.asset_count = 0;
             }
@@ -143,16 +154,24 @@ class JobService {
         }
 
         if (updateFields.length === 0) {
-            throw new Error('No valid fields to update', 400);
+            throw new ValidationError('No valid fields to update');
         }
 
-        updateValues.push(jobId, userId);
-        const query = `UPDATE jobs SET ${updateFields.join(', ')} WHERE id = ? AND user_id = ?`;
+        const updateObject = {};
+        for (let i = 0; i < updateFields.length; i++) {
+            const field = updateFields[i].split(' = ')[0];
+            updateObject[field] = updateValues[i];
+        }
 
-        const result = await database.query(query, updateValues);
+        const [affectedRows] = await Job.update(updateObject, {
+            where: {
+                id: jobId,
+                user_id: userId
+            }
+        });
 
-        if (result.affectedRows === 0) {
-            throw new Error('Job not found');
+        if (affectedRows === 0) {
+            throw new NotFoundError('Job not found');
         }
 
         return await this.getJobById(jobId, userId);
@@ -169,43 +188,61 @@ class JobService {
           JOB_STATUS.UPLOADING,
         ].includes(job.status)
       ) {
-        throw Error('Cannot delete job in current status');
+        throw new ForbiddenError('Cannot delete job in current status');
       }
 
-      const result = await database.query(
-        'DELETE FROM jobs where id = ? AND user_id = ?',
-        [jobId, userId]
-      );
+      // Use Sequelize transaction to ensure atomic deletion
+      const { sequelize } = require('../models/index');
+      
+      return await sequelize.transaction(async (t) => {
+        // First delete related media assets
+        await MediaAsset.destroy({
+          where: { job_id: jobId },
+          transaction: t
+        });
 
-      if (result.affectedRows === 0) {
-        throw new Error('Job not found', 404);
-      }
+        // Then delete the job
+        const deletedRows = await Job.destroy({
+          where: { 
+            id: jobId,
+            user_id: userId
+          },
+          transaction: t
+        });
 
-      return { message: 'Job deleted successfully' };
+        if (deletedRows === 0) {
+          throw new NotFoundError('Job not found or access denied');
+        }
+
+        return true;
+      });
     }
 
     async getJobAssets(jobId, userId) {
         await this.getJobById(jobId, userId);
 
-        const assets = await database.query(
-            'SELECT * FROM media_assets WHERE job_id = ? ORDER BY created_at DESC',
-            [jobId]
-        );
+        const assets = await MediaAsset.findAll({
+            where: { job_id: jobId },
+            order: [['created_at', 'DESC']],
+            raw: true
+        });
 
         return assets;
     }
 
     async getUserJobStats(userId) {
-        const stats = await database.query(`
-            SELECT 
-                status,
-                COUNT(*) as count,
-                AVG(progress) as avg_progress
-            FROM jobs 
-            WHERE user_id = ?
-            GROUP BY status
-            `, [userId]
-        );
+        const { sequelize } = require('../models/index');
+        
+        const stats = await Job.findAll({
+            attributes: [
+                'status',
+                [sequelize.fn('COUNT', '*'), 'count'],
+                [sequelize.fn('AVG', sequelize.col('progress')), 'avg_progress']
+            ],
+            where: { user_id: userId },
+            group: ['status'],
+            raw: true
+        });
 
         const statsObj = {};
 
@@ -224,20 +261,232 @@ class JobService {
     }
     
     async getProcessingStatus() {
-        const processingStats = VideoProcessingService.getProcessingStats();
+        const activeJobs = await Job.findAll({
+            attributes: ['id', 'status', 'progress', 'created_at'],
+            where: {
+                status: {
+                    [Op.in]: ['DOWNLOADING', 'PROCESSING', 'UPLOADING']
+                }
+            },
+            order: [['created_at', 'ASC']],
+            raw: true
+        });
 
-        const activeJobs = await database.query(`
-                SELECT id, status, progress, created_at
-                FROM jobs
-                WHERE status IN ('DOWNLOADING', 'PROCESSING', 'UPLOADING')
-                ORDER BY created_at ASC
-            `);
-        
+        const stats = await Job.findAll({
+            attributes: [
+                'status',
+                [require('sequelize').fn('COUNT', require('sequelize').col('id')), 'count']
+            ],
+            group: ['status'],
+            raw: true
+        });
+
+        const statusCounts = {};
+        stats.forEach(stat => {
+            statusCounts[stat.status] = parseInt(stat.count);
+        });
+
         return {
-            ...processingStats,
+            jobCounts: statusCounts,
+            queue: this.getQueueStatus(),
+            totalJobs: stats.reduce((sum, stat) => sum + parseInt(stat.count), 0),
             activeJobs
         };
-    } 
+    }
+
+    async getAdminJobStats() {
+        const { sequelize } = require('../models/index');
+        
+        const stats = await Job.findAll({
+            attributes: [
+                'status',
+                [sequelize.fn('COUNT', '*'), 'count'],
+                [sequelize.fn('AVG', sequelize.col('progress')), 'avg_progress']
+            ],
+            group: ['status'],
+            raw: true
+        });
+
+        const userCount = await User.count();
+
+        const recentJobs = await Job.count({
+            where: {
+                created_at: {
+                    [Op.gte]: sequelize.literal("NOW() - INTERVAL '24 hours'")
+                }
+            }
+        });
+
+        const statsObj = {};
+        Object.values(JOB_STATUS).forEach(status => {
+            statsObj[status] = 0;
+        });
+
+        stats.forEach(stat => {
+            statsObj[stat.status] = { 
+                count: parseInt(stat.count),
+                avg_progress: Math.round(stat.avg_progress || 0)
+            };
+        });
+
+        return {
+            jobStats: statsObj,
+            totalUsers: userCount,
+            recentJobs: recentJobs
+        };
+    }
+
+    async getAllJobsAdmin(options = {}) {
+        const { 
+            page = 1, 
+            limit = 10, 
+            status, 
+            sortBy = 'created_at', 
+            sortOrder = 'DESC' 
+        } = options;
+
+        const offset = (page - 1) * limit;
+        const validSortColumns = ['id', 'created_at', 'updated_at', 'status', 'progress'];
+        const validSortOrders = ['ASC', 'DESC'];
+        
+        const orderBy = validSortColumns.includes(sortBy) ? sortBy : 'created_at';
+        const order = validSortOrders.includes(sortOrder) ? sortOrder : 'DESC';
+
+        let whereCondition = {};
+        if (status && Object.values(JOB_STATUS).includes(status)) {
+            whereCondition.status = status;
+        }
+
+        const jobs = await Job.findAll({
+            where: whereCondition,
+            include: [{
+                model: User,
+                as: 'user',
+                attributes: ['email']
+            }],
+            order: [[orderBy, order]],
+            limit: parseInt(limit),
+            offset: offset,
+            raw: true,
+            nest: true
+        });
+
+        const total = await Job.count({ where: whereCondition });
+
+        return {
+            jobs,
+            pagination: {
+                page: parseInt(page),
+                limit: parseInt(limit),
+                total: parseInt(total),
+                totalPages: Math.ceil(total / limit)
+            }
+        };
+    }
+
+    async deleteJobAdmin(jobId) {
+        const job = await Job.findByPk(jobId);
+        
+        if (!job) {
+            throw new NotFoundError('Job not found');
+        }
+
+        await MediaAsset.destroy({ where: { job_id: jobId } });
+        await Job.destroy({ where: { id: jobId } });
+
+        return { deleted: true };
+    }
+
+    // ===== QUEUE MANAGEMENT METHODS =====
+
+    async resumeStuckJobs() {
+        try {
+            console.log('Checking for stuck jobs...');
+            
+            const { sequelize } = require('../models/index');
+            
+            const stuckJobs = await Job.findAll({
+                attributes: ['id', 'status', 'created_at'],
+                where: {
+                    status: {
+                        [Op.in]: ['DOWNLOADING', 'PROCESSING', 'UPLOADING']
+                    },
+                    updated_at: {
+                        [Op.lt]: sequelize.literal("NOW() - INTERVAL '10 minutes'")
+                    }
+                },
+                raw: true
+            });
+
+            if (stuckJobs.length > 0) {
+                console.log(`Found ${stuckJobs.length} stuck jobs, resetting to PENDING...`);
+                
+                await Job.update(
+                    { 
+                        status: 'PENDING', 
+                        progress: 0, 
+                        error_text: null,
+                        updated_at: new Date()
+                    },
+                    {
+                        where: {
+                            id: { [Op.in]: stuckJobs.map(job => job.id) }
+                        }
+                    }
+                );
+
+                console.log('Stuck jobs reset successfully');
+            } else {
+                console.log('No stuck jobs found');
+            }
+        } catch (error) {
+            console.error('Failed to resume stuck jobs:', error.message);
+        }
+    }
+
+    async addJobToQueue(jobId, processingFunction) {
+        this.processingQueue.push({ jobId, processingFunction });
+        console.log(`Job ${jobId} added to queue. Queue length: ${this.processingQueue.length}`);
+        
+        this.processNextJob();
+    }
+
+    async processNextJob() {
+        if (this.currentJobs >= this.maxConcurrentJobs) {
+            console.log(`Max concurrent jobs (${this.maxConcurrentJobs}) reached. Queued jobs: ${this.processingQueue.length}`);
+            return;
+        }
+
+        const nextJob = this.processingQueue.shift();
+        if (!nextJob) {
+            return;
+        }
+
+        this.currentJobs++;
+        console.log(`Starting job ${nextJob.jobId}. Active jobs: ${this.currentJobs}/${this.maxConcurrentJobs}`);
+
+        try {
+            await nextJob.processingFunction();
+            console.log(`Job ${nextJob.jobId} completed successfully`);
+        } catch (error) {
+            console.error(`Job ${nextJob.jobId} failed:`, error.message);
+        } finally {
+            this.currentJobs--;
+            console.log(`Job ${nextJob.jobId} finished. Active jobs: ${this.currentJobs}/${this.maxConcurrentJobs}`);
+            
+            // Process next job in queue
+            setImmediate(() => this.processNextJob());
+        }
+    }
+
+    getQueueStatus() {
+        return {
+            activeJobs: this.currentJobs,
+            maxConcurrentJobs: this.maxConcurrentJobs,
+            queuedJobs: this.processingQueue.length,
+            queuedJobIds: this.processingQueue.map(job => job.jobId)
+        };
+    }
 
 }
 

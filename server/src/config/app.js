@@ -2,13 +2,15 @@ const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
 const morgan = require('morgan');
+const awsConfig = require('./awsConfig');
 
 require('dotenv').config();
 
 class App {
     constructor () {
         this.app = express();
-        this.PORT = process.env.PORT || 8000;
+        this.config = awsConfig.getEnvironmentConfig();
+        this.PORT = this.config.server.port;
 
         this.setupMiddleware();
         this.setupRoutes();
@@ -19,13 +21,10 @@ class App {
 
       this.app.use(
         cors({
-          origin: [
-            `http://${process.env.CLIENT_HOST || 'localhost'}:3000`,
-            `http://${process.env.CLIENT_HOST || 'localhost'}:80`,
-            'http://localhost:3000',
-            'http://localhost:80'
-          ],
+          origin: awsConfig.getCorsOrigins(),
           credentials: true,
+          methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+          allowedHeaders: ['Content-Type', 'Authorization', 'x-requested-with', 'cache-control']
         })
       );
 
@@ -44,19 +43,25 @@ class App {
     setupRoutes() {
       const authRouter = require('../routes/authRouter');
       const jobsRouter = require('../routes/jobsRouter');
+      const errorHandler = require('../middleware/errorHandler');
 
       this.app.use('/api/auth', authRouter);
       this.app.use('/api/jobs', jobsRouter);
       
       // Health check endpoint
-      this.app.get('/api/health', (req, res) => {
+      this.app.get('/api/health', (_req, res) => {
         res.status(200).json({ status: 'OK', timestamp: new Date().toISOString() });
       });
+
+      // Global error handler (must be last)
+      this.app.use(errorHandler);
     }
 
     start() {
         this.app.listen(this.PORT, '0.0.0.0', () => {
-            console.log(`Server running on port ${process.env.APP_BASE_URL}:${this.PORT}`);
+            const serverUrl = `http://${this.config.server.host}:${this.PORT}`;
+            console.log(`Server running on ${serverUrl}`);
+            console.log(`Environment: ${this.config.environment}`);
         })
     }
 

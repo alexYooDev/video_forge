@@ -2,14 +2,15 @@ import React, { useEffect, useState } from 'react';
 import { useJobs } from '../../hooks/useJobs';
 import JobForm from './JobForm';
 import Card from '../ui/Card';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 const Dashboard = () => {
+  const navigate = useNavigate();
   const {
     createJob,
     stats,
     loading: jobsLoading,
-    refetch
+    refetchAll
   } = useJobs();
   const [creatingJob, setCreatingJob] = useState(false);
 
@@ -19,10 +20,10 @@ const Dashboard = () => {
 
   useEffect(() => {
     const updateStats = async () => {
-        await refetch();
+        await refetchAll();
     }
     updateStats();
-  }, [stats])
+  }, [refetchAll])  // Include refetchAll in dependencies
 
 
   const handleCreateJob = async (jobData) => {
@@ -31,7 +32,8 @@ const Dashboard = () => {
       const result = await createJob(jobData);
 
       if (result.success) {
-        alert(`Job created successfully! Job ID: ${result.data.id}`);
+        // Navigate to jobs page to see the job progress
+        navigate('/jobs');
       } else {
         alert(`Failed to create job: ${result.error}`);
       }
@@ -43,20 +45,20 @@ const Dashboard = () => {
   };
 
   // Calculate stats for display
-  const totalJobs = Object.values(stats).reduce((sum, stat) => {
+  const totalJobs = stats ? Object.values(stats).reduce((sum, stat) => {
     return sum + (typeof stat === 'object' ? stat.count || 0 : stat || 0);
-  }, 0);
+  }, 0) : 0;
 
-  const completedJobs = stats.COMPLETED
+  const completedJobs = (stats && stats.COMPLETED)
     ? typeof stats.COMPLETED === 'object'
-      ? stats.COMPLETED.count
-      : stats.COMPLETED
+      ? stats.COMPLETED.count || 0
+      : stats.COMPLETED || 0
     : 0;
 
-  const failedJobs = stats.FAILED
+  const failedJobs = (stats && stats.FAILED)
     ? typeof stats.FAILED === 'object'
-      ? stats.FAILED.count
-      : stats.FAILED
+      ? stats.FAILED.count || 0
+      : stats.FAILED || 0
     : 0;
 
   const activeJobs = [
@@ -65,7 +67,8 @@ const Dashboard = () => {
     'PROCESSING',
     'UPLOADING',
   ].reduce((sum, status) => {
-    const stat = stats[status];
+    const stat = stats && stats[status];
+    if (!stat) return sum;
     return sum + (typeof stat === 'object' ? stat.count || 0 : stat || 0);
   }, 0);
 
@@ -141,7 +144,7 @@ const Dashboard = () => {
             <div className='grid grid-cols-1 md:grid-cols-3 gap-6 mt-6'>
               <div className='text-center'>
                 <div className='w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3'>
-                  <span className='text-2xl'>1️⃣</span>
+                  <span className='text-2xl'>1.</span>
                 </div>
                 <h4 className='font-medium text-gray-900 mb-2'>Create a Job</h4>
                 <p className='text-sm text-gray-600'>
@@ -152,7 +155,7 @@ const Dashboard = () => {
 
               <div className='text-center'>
                 <div className='w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3'>
-                  <span className='text-2xl'>2️⃣</span>
+                  <span className='text-2xl'>2.</span>
                 </div>
                 <h4 className='font-medium text-gray-900 mb-2'>
                   Watch Processing
@@ -165,7 +168,7 @@ const Dashboard = () => {
 
               <div className='text-center'>
                 <div className='w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-3'>
-                  <span className='text-2xl'>3️⃣</span>
+                  <span className='text-2xl'>3.</span>
                 </div>
                 <h4 className='font-medium text-gray-900 mb-2'>
                   Download Results

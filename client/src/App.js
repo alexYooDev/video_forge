@@ -3,13 +3,16 @@ import { useAuthContext } from './context/AuthProvider';
 import Login from './components/auth/Login';
 import Layout from './components/layout/Layout';
 import Dashboard from './components/jobs/Dashboard';
+import AdminDashboard from './components/admin/AdminDashboard';
 import './output.css';
 
 // Main App Content (when authenticated)
 const AppContent = () => {
+  const { user } = useAuthContext();
+  
   return (
     <Layout>
-      <Dashboard />
+      {user?.role === 'admin' ? <AdminDashboard /> : <Dashboard />}
     </Layout>
   );
 };

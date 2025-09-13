@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   formatFileSize,
   getAssetTypeLabel,
@@ -9,31 +9,53 @@ import Button from '../ui/Button';
 import Card from '../ui/Card';
 import ProgressBar from '../ui/ProgressBar';
 import { jobsService } from '../../services/jobs';
+import { useRealtimeJobs } from '../../hooks/useRealtimeJobs';
 
 const JobCard = ({ job, onDelete, onRefresh }) => {
   const [assets, setAssets] = useState([]);
   const [loadingAssets, setLoadingAssets] = useState(false);
   const [showAssets, setShowAssets] = useState(false);
   const [downloadingAsset, setDownloadingAsset] = useState(null);
-  
   const [isDownloaded, setIsDownloaded] = useState([]);
+  
+  const [currentJob, setCurrentJob] = useState(job);
+  
+  // Enable real-time updates for all jobs initially, but optimize later
+  const { jobUpdates } = useRealtimeJobs(true);
+
+  useEffect(() => {
+    const jobUpdate = jobUpdates[job.id];
+    if (jobUpdate) {
+      setCurrentJob(prev => ({
+        ...prev,
+        status: jobUpdate.status,
+        progress: jobUpdate.progress,
+        updated_at: jobUpdate.updated_at
+      }));
+    } else {
+      setCurrentJob(job);
+    }
+  }, [jobUpdates, job]);
 
   const loadAssets = async () => {
-    if (job.status !== 'COMPLETED') return;
+    if (currentJob.status !== 'COMPLETED') return;
 
     try {
       setLoadingAssets(true);
       const response = await jobsService.getJobAssets(job.id);
-      setAssets(response.data || []);
+      setAssets(response || []);
     } catch (error) {
       console.error('Failed to load assets:', error);
+      // Show user-friendly error message
+      alert(`Failed to load assets: ${error.message}`);
+      setAssets([]);
     } finally {
       setLoadingAssets(false);
     }
   };
 
   const handleShowAssets = async () => {
-    if (!showAssets && assets.length === 0) {
+    if (!showAssets) {
       await loadAssets();
     }
     setShowAssets(!showAssets);
@@ -69,10 +91,10 @@ const JobCard = ({ job, onDelete, onRefresh }) => {
   };
 
   const canDelete = ['PENDING', 'FAILED', 'CANCELLED', 'COMPLETED'].includes(
-    job.status
+    currentJob.status
   );
   const isProcessing = ['DOWNLOADING', 'PROCESSING', 'UPLOADING'].includes(
-    job.status
+    currentJob.status
   );
 
   return (
@@ -91,21 +113,29 @@ const JobCard = ({ job, onDelete, onRefresh }) => {
           <div className='flex items-center space-x-2 ml-4'>
             <span
               className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${
-                STATUS_COLORS[job.status]
+                STATUS_COLORS[currentJob.status]
               }`}
             >
-              {STATUS_LABELS[job.status]}
+              {STATUS_LABELS[currentJob.status]}
             </span>
+            {isProcessing && (
+              <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+            )}
           </div>
         </div>
 
-        {/* Progress Bar */}
+        {/* Enhanced Progress Bar */}
         {isProcessing && (
-          <ProgressBar value={job.progress || 0} className='my-3' />
+          <ProgressBar 
+            value={currentJob.progress || 0} 
+            status={currentJob.status}
+            animated={true}
+            className='my-3' 
+          />
         )}
 
         {/* Error Message */}
-        {job.status === 'FAILED' && job.error_text && (
+        {currentJob.status === 'FAILED' && job.error_text && (
           <div className='bg-red-50 border border-red-200 rounded-md p-3'>
             <p className='text-sm text-red-800'>{job.error_text}</p>
           </div>
@@ -114,15 +144,15 @@ const JobCard = ({ job, onDelete, onRefresh }) => {
         {/* Metadata */}
         <div className='flex justify-between text-sm text-gray-500'>
           <span>Created: {new Date(job.created_at).toLocaleString()}</span>
-          {job.updated_at !== job.created_at && (
-            <span>Updated: {new Date(job.updated_at).toLocaleString()}</span>
+          {currentJob.updated_at !== job.created_at && (
+            <span>Updated: {new Date(currentJob.updated_at).toLocaleString()}</span>
           )}
         </div>
 
         {/* Actions */}
         <div className='flex justify-between items-center pt-4 border-t border-gray-200'>
           <div className='flex space-x-2'>
-            {job.status === 'COMPLETED' && (
+            {currentJob.status === 'COMPLETED' && (
               <Button
                 size='sm'
                 variant='outline'
@@ -155,7 +185,7 @@ const JobCard = ({ job, onDelete, onRefresh }) => {
         </div>
 
         {/* Assets List */}
-        {showAssets && job.status === 'COMPLETED' && (
+        {showAssets && currentJob.status === 'COMPLETED' && (
           <div className='pt-4 border-t border-gray-200'>
             <h5 className='text-sm font-medium text-gray-900 mb-3'>
               Generated Assets ({assets.length})
@@ -170,9 +200,9 @@ const JobCard = ({ job, onDelete, onRefresh }) => {
                 {assets.map((asset) => (
                   <div
                     key={asset.id}
-                    className='flex items-center justify-between p-3 bg-gray-50 rounded-lg border'
+                    className='flex flex-col p-3 bg-gray-50 rounded-lg border gap-3'
                   >
-                    <div className='flex-1 min-w-0'>
+                    <div>
                       <p className='text-sm font-medium text-gray-900'>
                         {getAssetTypeLabel(asset.asset_type)}
                       </p>
@@ -180,15 +210,16 @@ const JobCard = ({ job, onDelete, onRefresh }) => {
                         {formatFileSize(asset.size_bytes)}
                       </p>
                     </div>
-                    <Button
-                      size='sm'
-                      variant='outline'
-                      onClick={() => handleDownloadAsset(asset)}
-                      loading={downloadingAsset === asset.id}
-                      className='ml-3'
-                    >
-                     { isDownloaded.includes(asset.id) ? 'Downloaded' : 'Download' }
-                    </Button>
+                    <div className='flex justify-start'>
+                      <Button
+                        size='sm'
+                        variant='outline'
+                        onClick={() => handleDownloadAsset(asset)}
+                        loading={downloadingAsset === asset.id}
+                      >
+                       { isDownloaded.includes(asset.id) ? 'Downloaded' : 'Download' }
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>
