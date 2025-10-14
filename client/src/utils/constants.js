@@ -9,6 +9,7 @@ export const JOB_STATUS = {
 };
 
 export const ASSET_TYPES = {
+  TRANSCODE_4K: 'TRANSCODE_4K',
   TRANSCODE_1080: 'TRANSCODE_1080',
   TRANSCODE_720: 'TRANSCODE_720',
   TRANSCODE_480: 'TRANSCODE_480',
@@ -16,7 +17,7 @@ export const ASSET_TYPES = {
 };
 
 // gif for the future integration or improvement
-export const SUPPORTED_FORMATS = ['1080p', '720p', '480p'];
+export const SUPPORTED_FORMATS = ['4k', '1080p', '720p', '480p'];
 
 export const STATUS_COLORS = {
   PENDING: 'text-yellow-600 bg-yellow-50 border-yellow-200',

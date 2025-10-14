@@ -1,9 +1,17 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthContext } from './context/AuthProvider';
 import Login from './components/auth/Login';
+import MFALogin from './components/auth/MFALogin';
+import OAuthCallback from './components/auth/OAuthCallback';
 import Layout from './components/layout/Layout';
 import Dashboard from './components/jobs/Dashboard';
 import AdminDashboard from './components/admin/AdminDashboard';
+import JobList from './components/jobs/JobList';
+import SearchVideo from './components/search/SearchVideo';
+import VideoGallery from './components/jobs/VideoGallery';
+import UploadPage from './components/jobs/UploadPage';
+import VideoDetail from './components/jobs/VideoDetail';
 import './output.css';
 
 // Main App Content (when authenticated)
@@ -17,9 +25,19 @@ const AppContent = () => {
   );
 };
 
-// Auth Guard Component
-const AuthGuard = () => {
-  const { user, loading, error } = useAuthContext();
+
+// Main App Component
+function App() {
+  const { user, loading } = useAuthContext();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // Handle navigation after authentication
+  useEffect(() => {
+    if (user && location.pathname === '/mfa-login') {
+      navigate('/', { replace: true });
+    }
+  }, [user, location.pathname, navigate]);
 
   if (loading) {
     return (
@@ -32,38 +50,63 @@ const AuthGuard = () => {
     );
   }
 
-  if (error) {
-    return (
-      <div className='min-h-screen flex items-center justify-center bg-gray-50'>
-        <div className='text-center max-w-md'>
-          <div className='bg-red-50 border border-red-200 rounded-lg p-6'>
-            <h2 className='text-lg font-medium text-red-800 mb-2'>
-              Authentication Error
-            </h2>
-            <p className='text-red-700 mb-4'>{error}</p>
-            <button
-              onClick={() => window.location.reload()}
-              className='bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700'
-            >
-              Retry
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return <Login />;
-  }
-
-  return <AppContent />;
-};
-
-// Main App Component
-function App() {
   return (
-      <AuthGuard />
+    <Routes>
+      {/* Public routes (when not authenticated) */}
+      {!user && (
+        <>
+          <Route path='/' element={<Login />} />
+          <Route path='/mfa-login' element={<MFALogin />} />
+          <Route path='/auth/callback' element={<OAuthCallback />} />
+          <Route path='/gallery' element={<VideoGallery />} />
+          <Route path='/video/:id' element={<VideoDetail />} />
+        </>
+      )}
+
+      {/* Protected routes (when authenticated) */}
+      {user && (
+        <>
+          <Route path='/' element={<AppContent />} />
+          <Route
+            path='/jobs'
+            element={
+              <Layout>
+                <JobList />
+              </Layout>
+            }
+          />
+          <Route
+            path='/search-video'
+            element={
+              <Layout>
+                <SearchVideo />
+              </Layout>
+            }
+          />
+          <Route
+            path='/upload'
+            element={
+              <Layout>
+                <UploadPage />
+              </Layout>
+            }
+          />
+          <Route path='/gallery' element={
+            <Layout>
+              <VideoGallery />
+            </Layout>
+            } />
+          <Route path='/video/:id' element={
+            <Layout>
+              <VideoDetail />
+            </Layout>
+            } />
+        </>
+      )}
+
+      {/* Fallback route */}
+      <Route path='*' element={user ? <AppContent /> : <Login />} />
+    </Routes>
   );
 }
 

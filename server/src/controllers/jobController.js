@@ -36,12 +36,19 @@ class JobController {
             const options = {
                 page: req.query.page,
                 limit: req.query.limit,
-                staus: req.query.status,
+                status: req.query.status,
                 sortBy: req.query.sortBy,
                 sortOrder: req.query.sortOrder
             };
 
-            const result = await jobService.getAllJobs(req.user.id, options);
+            // If user is admin, show all jobs from all users
+            let result;
+            if (req.user.role === 'admin') {
+                result = await jobService.getAllJobsAdmin(options);
+            } else {
+                // Regular users only see their own jobs
+                result = await jobService.getAllJobs(req.user.id, options);
+            }
 
             res.status(200).json({
                 jobs: result.jobs, 
@@ -144,38 +151,55 @@ class JobController {
             await jobService.getJobById(jobId, req.user.id);
 
             const assets = await jobService.getJobAssets(jobId, req.user.id);
-            const asset = assets.find(asset => asset.id === assetId);
+
+           
+            const asset = assets.find(asset => parseInt(asset.id) === assetId);
 
             if (!asset) {
                 return res.status(404).json({message: "Asset not found."});
             }
             
             // Check if asset is stored in S3
-            if (asset.path && asset.path.startsWith('s3://')) {
-                const s3Key = asset.path.replace('s3://', '').split('/').slice(1).join('/');
-                const filename = path.basename(asset.path);
-                
-                // Generate pre-signed URL for download
-                const presignedUrl = await s3Service.getPresignedUrl(s3Key, 'getObject', {
-                    ResponseContentDisposition: `attachment; filename="${filename}"`,
-                    ResponseContentType: this.getAssetType(asset.asset_type)
-                });
+            if (asset.s3_key && asset.s3_key.startsWith('s3://')) {
+                const s3Key = asset.s3_key.replace('s3://', '').split('/').slice(1).join('/');
+                const filename = path.basename(asset.s3_key);
 
-                return res.status(200).json({
-                    downloadUrl: presignedUrl,
-                    filename: filename,
-                    message: 'Pre-signed download URL generated successfully'
-                });
+                console.log(this.getAssetType(asset.asset_type));
+
+                try {
+                    // Generate pre-signed URL for download
+                    const presignedUrl = await s3Service.getPresignedUrl(s3Key, 'getObject', {
+                        ResponseContentDisposition: `attachment; filename="${filename}"`,
+                        ResponseContentType: this.getAssetType(asset.asset_type)
+                    });
+
+                    return res.status(200).json({
+                        downloadUrl: presignedUrl,
+                        filename: filename,
+                        message: 'Pre-signed download URL generated successfully'
+                    });
+                } catch (error) {
+                    if (error.name === 'NotFound') {
+                        return res.status(404).json({
+                            message: 'Asset file not found in storage',
+                            error: 'The requested asset file could not be found in cloud storage. It may have been moved or deleted.',
+                            assetId: assetId,
+                            filename: filename
+                        });
+                    }
+                    // Re-throw other errors to be handled by the outer catch block
+                    throw error;
+                }
             }
 
             // Fallback for local file storage
-            const filename = path.basename(asset.path);
+            const filename = path.basename(asset.s3_key);
             const assetType = this.getAssetType(asset.asset_type);
 
             res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
             res.setHeader('Content-Type', assetType);
 
-            const fileStream = fs.createReadStream(asset.path);
+            const fileStream = fs.createReadStream(asset.s3_key);
             fileStream.pipe(res);
 
             fileStream.on('error', (error) => {
@@ -213,7 +237,7 @@ class JobController {
         }
     }
 
-    async getProcessingStatus(req, res, next) {
+    async getProcessingStatus(_req, res, next) {
         try {
             const status = await jobService.getProcessingStatus();
             
@@ -333,8 +357,6 @@ class JobController {
         try {
             const { concurrent = 4, durationMinutes = 6, jobInterval = 2000 } = req.body;
             
-            console.log(`Starting advanced load test with LoadTester class...`);
-            console.log(`Configuration: ${concurrent} concurrent jobs for ${durationMinutes} minutes`);
             
             // Start CPU monitoring
             const cpuMonitor = startCPUMonitoring();
@@ -346,22 +368,39 @@ class JobController {
             
             // Create LoadTester instance with authentication token from current user session
             const authToken = req.headers.authorization?.replace('Bearer ', '');
-            const loadTester = new LoadTester(authToken);
+
+            // Pass the correct server URL to LoadTester - ensure HTTPS for remote servers
+            let serverUrl = `${req.protocol}://${req.get('host')}`;
+
+            // Force HTTPS for remote servers to avoid 301 redirects
+            if (req.get('host').includes('cab432.com')) {
+                serverUrl = serverUrl.replace('http://', 'https://');
+            }
+
+            const loadTester = new LoadTester(authToken, serverUrl);
             
             // Start the load test asynchronously
             loadTester.startLoadTest().catch(error => {
                 console.error('Load test execution error:', error);
             });
             
+            // Generate monitoring instructions for frontend display
+            const platform = require('os').platform();
+            const monitoringInstructions = platform === 'darwin'
+                ? 'Open Activity Monitor > CPU tab OR run "htop" in terminal (CMD+T)'
+                : 'SSH to server and run: htop (or btop if installed)';
+
             res.status(200).json({
                 success: true,
-                message: `Advanced load test started successfully`,
+                message: `Load test started successfully`,
                 result: {
                     concurrent,
                     durationMinutes,
                     jobInterval,
                     status: 'Load test running in background',
-                    cpuMonitoring: 'CPU monitoring started'
+                    target: `Maintain 80%+ CPU usage for 5+ minutes`,
+                    monitoringInstructions,
+                    platform: platform === 'darwin' ? 'macOS' : 'Linux'
                 }
             });
             
@@ -378,6 +417,78 @@ class JobController {
         } catch (err) {
             console.error('Load test error:', err);
             next(err);
+        }
+    }
+
+    async restartFailedJobs(_req, res, next) {
+        try {
+            const result = await jobService.restartFailedJobs();
+            res.status(200).json({
+                result,
+                message: `Restarted ${result.restartedCount} failed jobs`
+            });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async cleanupOldJobs(_req, res, next) {
+        try {
+            const result = await jobService.cleanupOldJobs();
+            res.status(200).json({
+                result,
+                message: `Deleted ${result.deletedCount} old jobs`
+            });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async getRecentActivity(_req, res, next) {
+        try {
+            const recentJobs = await jobService.getRecentJobs(5); // Get last 5 jobs
+
+            const activities = recentJobs.map(job => {
+                const timeAgo = Math.floor((Date.now() - new Date(job.created_at).getTime()) / (1000 * 60));
+                let activity, color;
+
+                switch (job.status) {
+                    case 'COMPLETED':
+                        activity = 'Job completed';
+                        color = 'green';
+                        break;
+                    case 'FAILED':
+                        activity = 'Job failed';
+                        color = 'red';
+                        break;
+                    case 'PROCESSING':
+                        activity = 'Job processing';
+                        color = 'blue';
+                        break;
+                    case 'PENDING':
+                        activity = 'Job queued';
+                        color = 'yellow';
+                        break;
+                    default:
+                        activity = 'Job status updated';
+                        color = 'gray';
+                }
+
+                return {
+                    id: job.id,
+                    activity,
+                    color,
+                    timeAgo: timeAgo < 60 ? `${timeAgo} min ago` : `${Math.floor(timeAgo / 60)}h ago`,
+                    timestamp: job.created_at
+                };
+            });
+
+            res.status(200).json({
+                activities,
+                message: 'Recent activity retrieved successfully'
+            });
+        } catch (error) {
+            next(error);
         }
     }
 }

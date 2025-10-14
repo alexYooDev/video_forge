@@ -4,16 +4,30 @@ const cors = require('cors');
 const morgan = require('morgan');
 const awsConfig = require('./awsConfig');
 
+const authRouter = require('../routes/authRouter');
+const jobsRouter = require('../routes/jobsRouter');
+const storageRouter = require('../routes/storageRouter');
+const errorHandler = require('../middleware/errorHandler');
+
 require('dotenv').config();
 
 class App {
     constructor () {
         this.app = express();
-        this.config = awsConfig.getEnvironmentConfig();
+        this.config = null;
+        this.PORT = parseInt(process.env.SERVER_PORT || '8000');
+        this.initialized = false;
+    }
+
+    async initialize() {
+        if (this.initialized) return;
+
+        this.config = await awsConfig.getEnvironmentConfig();
         this.PORT = this.config.server.port;
 
         this.setupMiddleware();
         this.setupRoutes();
+        this.initialized = true;
     }
 
     setupMiddleware() {
@@ -21,7 +35,7 @@ class App {
 
       this.app.use(
         cors({
-          origin: awsConfig.getCorsOrigins(),
+          origin: true, // Allow all origins for API Gateway compatibility
           credentials: true,
           methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
           allowedHeaders: ['Content-Type', 'Authorization', 'x-requested-with', 'cache-control']
@@ -41,12 +55,9 @@ class App {
     }
 
     setupRoutes() {
-      const authRouter = require('../routes/authRouter');
-      const jobsRouter = require('../routes/jobsRouter');
-      const errorHandler = require('../middleware/errorHandler');
-
       this.app.use('/api/auth', authRouter);
       this.app.use('/api/jobs', jobsRouter);
+      this.app.use('/api/storage', storageRouter);
       
       // Health check endpoint
       this.app.get('/api/health', (_req, res) => {
@@ -57,7 +68,9 @@ class App {
       this.app.use(errorHandler);
     }
 
-    start() {
+    async start() {
+        await this.initialize();
+
         this.app.listen(this.PORT, '0.0.0.0', () => {
             const serverUrl = `http://${this.config.server.host}:${this.PORT}`;
             console.log(`Server running on ${serverUrl}`);

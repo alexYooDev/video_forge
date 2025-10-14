@@ -4,17 +4,30 @@
  * Much smaller and focused compared to the original 611-line service
  */
 
-const { Job, MediaAsset } = require('../models/index');
+const { getCurrentModels } = require('../models/index');
 const { JOB_STATUS, ASSET_TYPES } = require('../utils/constants');
 const { InternalServerError } = require('../utils/errors');
 
 const videoDownloadService = require('./videoDownloadService');
 const videoTranscodeService = require('./videoTranscodeService');
 const s3Service = require('./s3Service');
+const awsConfig = require('../config/awsConfig');
+const fs = require('fs-extra');
 
 class VideoProcessingOrchestrator {
   constructor() {
     console.log('Video processing orchestrator initialized');
+  }
+
+  // Check if S3 is configured using AWS config
+  async isS3Configured() {
+    try {
+      await s3Service.ensureInitialized();
+      return !!(s3Service.bucketName);
+    } catch (error) {
+      console.warn('Failed to check S3 configuration:', error.message);
+      return false;
+    }
   }
 
   async processJob(jobId, validFormats) {
@@ -37,7 +50,7 @@ class VideoProcessingOrchestrator {
       // Extract and save metadata
       await this.updateJobStatus(jobId, JOB_STATUS.PROCESSING, 10);
       const metadata = await videoTranscodeService.getVideoMetadata(inputVideoPath);
-      await this.saveMetadata(jobId, metadata);
+      await this.saveMetadataHybrid(jobId, metadata);
 
       // Generate thumbnail and GIF
       const thumbnail = await videoTranscodeService.generateThumbnail(inputVideoPath, jobId);
@@ -86,6 +99,7 @@ class VideoProcessingOrchestrator {
   }
 
   async getJobById(jobId) {
+    const { Job } = getCurrentModels();
     const job = await Job.findByPk(jobId);
     if (!job) {
       throw new Error(`Job not found: ${jobId}`);
@@ -99,13 +113,14 @@ class VideoProcessingOrchestrator {
       updateData.progress = Math.min(100, Math.max(0, progress));
     }
 
+    const { Job } = getCurrentModels();
     await Job.update(updateData, { where: { id: jobId } });
     console.log(`Job ${jobId} status updated: ${status}${progress !== null ? ` (${progress}%)` : ''}`);
   }
 
   async saveMediaAsset(jobId, assetData) {
     try {
-      const useS3 = !!(process.env.S3_BUCKET_NAME);
+      const useS3 = await this.isS3Configured();
       let finalPath = assetData.path;
 
       if (useS3) {
@@ -123,11 +138,18 @@ class VideoProcessingOrchestrator {
         }
       }
 
+      const { MediaAsset } = getCurrentModels();
       await MediaAsset.create({
         job_id: jobId,
         asset_type: assetData.format,
-        path: finalPath,
-        size_bytes: null // Could add file size if needed
+        s3_key: finalPath,
+        file_size: assetData.size || null,
+        format: assetData.format_type || null,
+        resolution: assetData.resolution || null,
+        duration: assetData.duration || null,
+        bitrate: assetData.bitrate || null,
+        s3_url: useS3 ? finalPath : null,
+        metadata: assetData.metadata || null
       });
 
       console.log(`Media asset saved: ${assetData.format} -> ${finalPath}`);
@@ -137,18 +159,50 @@ class VideoProcessingOrchestrator {
     }
   }
 
-  async saveMetadata(jobId, metadata) {
+  async saveMetadataHybrid(jobId, metadata) {
     const metadataFileName = `${jobId}_metadata.json`;
     const metadataPath = `/tmp/${metadataFileName}`;
     
     try {
-      await require('fs-extra').writeJson(metadataPath, metadata, { spaces: 2 });
+      // Save complete metadata file to local temp
+      await fs.writeJson(metadataPath, metadata, { spaces: 2 });
       
-      await this.saveMediaAsset(jobId, {
-        path: metadataPath,
-        format: 'METADATA_JSON',
-        filename: metadataFileName
-      });
+      // Upload to S3 if configured
+      const useS3 = await this.isS3Configured();
+      let metadataS3Key = null;
+      
+      if (useS3) {
+        const s3Key = s3Service.generateS3Key(jobId, metadataFileName, 'metadata');
+        await s3Service.uploadFile(metadataPath, s3Key, 'application/json');
+        metadataS3Key = s3Key;
+        
+        // Clean up local file after upload
+        try {
+          await fs.remove(metadataPath);
+          console.log(`Local metadata file cleaned up: ${metadataPath}`);
+        } catch (cleanupError) {
+          console.error(`Failed to cleanup local metadata file: ${cleanupError.message}`);
+        }
+      }
+      
+      // Extract key fields for structured storage in RDS
+      const videoStream = metadata.video || {};
+      const audioStream = metadata.audio || {};
+      const format = metadata.format || {};
+      
+      const metadataUpdate = {
+        metadata_s3_key: metadataS3Key,
+        duration: parseFloat(metadata.duration) || null,
+        original_size: parseInt(format.size) || null,
+        original_bitrate: parseInt(format.bit_rate) || null,
+        resolution: videoStream.width && videoStream.height ? `${videoStream.width}x${videoStream.height}` : null,
+        video_codec: videoStream.codec_name || null,
+        audio_codec: audioStream.codec_name || null
+      };
+
+      const { Job } = getCurrentModels();
+      await Job.update(metadataUpdate, { where: { id: jobId } });
+      console.log(`Metadata saved: structured data in RDS${useS3 ? ` and complete file in S3 (${metadataS3Key})` : ''}`);
     } catch (error) {
       console.error(`Failed to save metadata:`, error);
       throw InternalServerError(`Failed to save metadata: ${error.message}`);
@@ -157,6 +211,7 @@ class VideoProcessingOrchestrator {
 
   async handleProcessingError(jobId, error) {
     try {
+      const { Job } = getCurrentModels();
       await Job.update(
         {
           status: JOB_STATUS.FAILED,
@@ -182,8 +237,6 @@ class VideoProcessingOrchestrator {
     };
     return types[assetType] || 'application/octet-stream';
   }
-
-  // Queue operations removed - now handled by jobService directly
 }
 
 module.exports = new VideoProcessingOrchestrator();

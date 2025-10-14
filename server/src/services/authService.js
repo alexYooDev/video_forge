@@ -1,9 +1,32 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { User } = require('../models/index');
+const { getCurrentModels } = require('../models/index');
 const { UnauthorizedError, NotFoundError, ConflictError } = require('../utils/errors');
+const awsConfig = require('../config/awsConfig');
 
 class AuthService {
+    constructor() {
+        this.initialized = false;
+        this.jwtSecret = null;
+        this.jwtExpiresIn = null;
+    }
+
+    async initialize() {
+        if (this.initialized) return;
+
+        // Load configuration from AWS
+        const awsConfiguration = await awsConfig.loadConfiguration();
+        this.jwtSecret = awsConfiguration.JWT_SECRET || 'fallback-secret';
+        this.jwtExpiresIn = process.env.JWT_EXPIRES_IN || '12h'; // Not in AWS config yet
+        this.initialized = true;
+    }
+
+    async ensureInitialized() {
+        if (!this.initialized) {
+            await this.initialize();
+        }
+    }
+
     // DRY: Extract user object creation (used in login, register, updateUserRole)
     formatUserResponse(user) {
         return {
@@ -14,21 +37,23 @@ class AuthService {
         };
     }
 
-    async login(email, password) {
-        const user = await User.findOne({ where: { email } });
+    async login(username, password) {
+        const { User } = getCurrentModels();
+
+        const user = await User.findOne({ where: { username } });
         
         if (!user) {
-            throw UnauthorizedError('Invalid email or password');
+            throw UnauthorizedError('Invalid username or password');
         }
         
         const isPasswordValid = await bcrypt.compare(password, user.password);
         
         if (!isPasswordValid) {
-            throw UnauthorizedError('Invalid email or password');
+            throw UnauthorizedError('Invalid username or password');
         }
 
         const userResponse = this.formatUserResponse(user);
-        const token = this.generateToken(userResponse);
+        const token = await this.generateToken(userResponse);
 
         return {
             user: userResponse,
@@ -36,20 +61,22 @@ class AuthService {
         };
     }
     
-    generateToken(payload) {
+    async generateToken(payload) {
+        await this.ensureInitialized();
         return jwt.sign(
             payload,
-            process.env.JWT_SECRET || 'fallback-secret',
+            this.jwtSecret,
             {
-                expiresIn: process.env.JWT_EXPIRES_IN || '12h',
+                expiresIn: this.jwtExpiresIn,
                 issuer: 'Video-Forge-api'
             }
         )
     }
 
-    verifyToken(token) {
+    async verifyToken(token) {
+        await this.ensureInitialized();
         try {
-            return jwt.verify(token, process.env.JWT_SECRET);
+            return jwt.verify(token, this.jwtSecret);
         } catch(err) {
             if (err.name === 'TokenExpiredError') {
                 throw UnauthorizedError('Token expired');
@@ -59,6 +86,8 @@ class AuthService {
     }
     
     async getUserById(userId) {
+        const { User } = getCurrentModels();
+
         const user = await User.findByPk(userId, {
             attributes: ['id', 'username', 'email', 'role', 'created_at']
         });
@@ -70,6 +99,8 @@ class AuthService {
     }
 
     async register(email, password, username) {
+        const { User } = getCurrentModels();
+
         // Check if user already exists by email
         const existingByEmail = await User.findOne({ where: { email } });
         if (existingByEmail) {
@@ -91,7 +122,7 @@ class AuthService {
         });
 
         const userResponse = this.formatUserResponse(newUser);
-        const token = this.generateToken(userResponse);
+        const token = await this.generateToken(userResponse);
 
         return {
             user: userResponse,
@@ -100,6 +131,8 @@ class AuthService {
     }
 
     async getAllUsers() {
+        const { User } = getCurrentModels();
+
         const users = await User.findAll({
             attributes: ['id', 'username', 'email', 'role', 'created_at'],
             order: [['created_at', 'DESC']]
@@ -108,6 +141,8 @@ class AuthService {
     }
 
     async deleteUser(userId) {
+        const { User } = getCurrentModels();
+
         const result = await User.destroy({
             where: { id: userId }
         });
@@ -120,16 +155,90 @@ class AuthService {
     }
 
     async updateUserRole(userId, role) {
+        const { User } = getCurrentModels();
+
         const [updatedRowsCount] = await User.update(
             { role },
             { where: { id: userId } }
         );
-        
+
         if (updatedRowsCount === 0) {
             throw NotFoundError('User not found');
         }
-        
+
         return await this.getUserById(userId);
+    }
+
+    async ensureUserExists(userInfo) {
+        try {
+            const { User } = getCurrentModels();
+
+            console.log('Ensuring user exists for OAuth user:', {
+                id: userInfo.id,
+                email: userInfo.email,
+                username: userInfo.username,
+                role: userInfo.role
+            });
+
+            // Check if user already exists by ID
+            let existingUser = await User.findByPk(userInfo.id);
+            if (existingUser) {
+                console.log('User already exists in database');
+                return existingUser;
+            }
+
+            // Check if user exists by email (could be a different Cognito user with same email)
+            existingUser = await User.findOne({ where: { email: userInfo.email } });
+            if (existingUser) {
+                console.log('User exists by email, updating ID to match OAuth provider');
+                // Update the existing user's ID to match OAuth provider
+                await existingUser.update({ id: userInfo.id });
+                return existingUser;
+            }
+
+            // Use Google-provided username or email as fallback
+            const finalUsername = userInfo.username || userInfo.email;
+
+            // Create user in local database
+            const userData = {
+                id: userInfo.id,
+                email: userInfo.email,
+                username: finalUsername,
+                role: userInfo.role || 'user',
+                password: null // OAuth users don't have passwords
+            };
+
+            console.log('Creating new OAuth user with data:', userData);
+            const newUser = await User.create(userData);
+            console.log('OAuth user created successfully');
+            return newUser;
+        } catch (error) {
+            console.error('Failed to ensure user exists:', {
+                error: error.message,
+                name: error.name,
+                stack: error.stack,
+                userInfo: {
+                    id: userInfo.id,
+                    email: userInfo.email,
+                    username: userInfo.username
+                }
+            });
+
+            // Try to find user by email one more time (race condition handling)
+            try {
+                const { User } = getCurrentModels();
+                const fallbackUser = await User.findOne({ where: { email: userInfo.email } });
+                if (fallbackUser) {
+                    console.log('Found user in fallback search');
+                    return fallbackUser;
+                }
+            } catch (fallbackError) {
+                console.error('Fallback search also failed:', fallbackError.message);
+            }
+
+            // Throw error instead of returning null to prevent constraint violations
+            throw new Error(`Failed to create user record for OAuth user: ${error.message}`);
+        }
     }
 }
 

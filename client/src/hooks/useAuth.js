@@ -3,6 +3,7 @@ import { authService } from '../services/auth';
 
 export const useAuth = () => {
   const [user, setUser] = useState(null);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -29,30 +30,40 @@ export const useAuth = () => {
       setLoading(true);
       setError(null);
 
-      try {
-        const { user: userData } = await authService.login(email, password);
-        setUser(userData);
-        return { success: true };
-      } catch (loginError) {
-        const mfaResult = await authService.loginWithMFA(email, password);
-        
-        if (mfaResult.challenge === 'SOFTWARE_TOKEN_MFA') {
-          return { 
-            success: false, 
-            requiresMFA: true, 
-            session: mfaResult.session 
-          };
-        }
-        
-        if (mfaResult.tokens) {
-          const { user: userData } = mfaResult;
-          setUser(userData);
-          return { success: true };
-        }
-        
-        throw loginError;
+      const result = await authService.login(email, password);
+
+      // Check if MFA is required
+      if (result.requiresMFA) {
+        return {
+          success: false,
+          requiresMFA: true,
+          session: result.session,
+          challengeName: result.challengeName,
+          message: result.message,
+          destination: result.destination
+        };
       }
+
+      // Check if it's a successful login with user data
+      if (result.user) {
+        setUser(result.user);
+        return { success: true };
+      }
+
     } catch (error) {
+      console.error('useAuth.login failed:', error);
+
+      // Check if user needs email verification
+      if (error.message.includes('verify your email') ||
+          error.message.includes('UserNotConfirmedException')) {
+        return {
+          success: false,
+          requiresVerification: true,
+          email: email,
+          error: 'Please verify your email before logging in.'
+        };
+      }
+
       setError(error.message);
       return { success: false, error: error.message };
     } finally {
@@ -60,12 +71,12 @@ export const useAuth = () => {
     }
   };
 
-  const completeMFALogin = async (session, totpCode) => {
+  const completeMFALogin = async (session, otpCode, challengeName = 'EMAIL_OTP', username = null) => {
     try {
       setLoading(true);
       setError(null);
 
-      const { user: userData } = await authService.completeMFA(session, totpCode);
+      const { user: userData } = await authService.completeMFA(session, otpCode, challengeName, username);
       setUser(userData);
 
       return { success: true };
@@ -88,11 +99,18 @@ export const useAuth = () => {
     }
   };
 
+  const loginWithToken = (user) => {
+    // For OAuth logins where we already have the user data
+    setUser(user);
+    return { success: true };
+  };
+
   return {
     user,
     loading,
     error,
     login,
+    loginWithToken,
     completeMFALogin,
     logout,
     isAuthenticated: !!user,

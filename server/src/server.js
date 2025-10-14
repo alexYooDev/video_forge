@@ -8,11 +8,12 @@ const awsConfig = require('./config/awsConfig');
 const App = require('./config/app');
 const { initDatabase } = require('./models/index');
 const jobService = require('./services/jobService');
+const cacheService = require('./services/cacheService');
 
 async function startServer () {
     try {
-        // Load AWS configuration if in production or if AWS credentials are available
-        if (process.env.NODE_ENV === 'production' || process.env.AWS_ACCESS_KEY_ID) {
+        // Load AWS configuration if in production, if AWS credentials are available, or if AWS SSO is configured
+        if (process.env.NODE_ENV === 'production' || process.env.AWS_ACCESS_KEY_ID || process.env.AWS_PROFILE) {
             try {
                 console.log('Attempting to load configuration from AWS...');
                 const config = await awsConfig.loadConfiguration();
@@ -27,12 +28,21 @@ async function startServer () {
 
         // Initialize PostgreSQL database
         await initDatabase();
-        
+
+        // Update service configurations with AWS values
+        console.log('Updating service configurations with AWS values...');
+        jobService.updateConfig();
+        cacheService.updateConfig();
+
+        // Initialize cache service
+        console.log('Initializing cache service...');
+        await cacheService.connect();
+
         // Resume any stuck jobs from previous sessions
         await jobService.resumeStuckJobs();
         
         const app = new App();
-        app.start();
+        await app.start();
 
         process.on('SIGTERM', async () => {
             console.log('Signal terminated. shutting the server down...');

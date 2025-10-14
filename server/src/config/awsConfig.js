@@ -13,24 +13,30 @@ class AWSConfigService {
     return {
       // Secrets (sensitive data)
       secrets: {
-        'PG_PASSWORD': '/video-forge/database/postgres-password',
-        'JWT_SECRET': '/video-forge/auth/jwt-secret',
-        'PIXABAY_API_KEY': '/video-forge/external-apis/pixabay-key'
+        PG_PASSWORD: '/video-forge/database/postgres-password',
+        JWT_SECRET: '/video-forge/auth/jwt-secret',
+        PIXABAY_API_KEY: '/video-forge/external-apis/pixabay-key',
+        COGNITO_CLIENT_SECRET: '/video-forge/auth/cognito-client-secret',
       },
-      
+
       // Parameters (configuration data)
       parameters: {
-        'APP_BASE_URL': '/video-forge/config/app-base-url',
-        'PG_HOST': '/video-forge/database/postgres-host',
-        'PG_PORT': '/video-forge/database/postgres-port',
-        'PG_DATABASE': '/video-forge/database/postgres-database',
-        'PG_USERNAME': '/video-forge/database/postgres-username',
-        'MAX_CONCURRENT_JOBS': '/video-forge/processing/max-concurrent-jobs',
-        'SAMPLE_VIDEO_URL': '/video-forge/config/sample-video-url',
-        'FFMPEG_THREADS': '/video-forge/processing/ffmpeg-threads',
-        'LOG_LEVEL': '/video-forge/config/log-level',
-        'S3_BUCKET_NAME': '/video-forge/storage/s3-bucket-name'
-      }
+        APP_BASE_URL: '/video-forge/config/app-base-url',
+        PG_HOST: '/video-forge/database/postgres-host',
+        PG_PORT: '/video-forge/database/postgres-port',
+        PG_DATABASE: '/video-forge/database/postgres-database',
+        PG_USERNAME: '/video-forge/database/postgres-username',
+        MAX_CONCURRENT_JOBS: '/video-forge/processing/max-concurrent-jobs',
+        SAMPLE_VIDEO_URL: '/video-forge/config/sample-video-url',
+        FFMPEG_THREADS: '/video-forge/processing/ffmpeg-threads',
+        LOG_LEVEL: '/video-forge/config/log-level',
+        S3_BUCKET_NAME: '/video-forge/config/s3-bucket-name',
+        COGNITO_USER_POOL_ID: '/video-forge/auth/cognito-user-pool-id',
+        COGNITO_CLIENT_ID: '/video-forge/auth/cognito-client-id',
+        REDIS_HOST: '/video-forge/cache/redis-host',
+        REDIS_PORT: '/video-forge/cache/redis-port',
+        CACHE_ENABLED: '/video-forge/cache/enabled',
+      },
     };
   }
 
@@ -38,7 +44,21 @@ class AWSConfigService {
     try {
       const command = new GetSecretValueCommand({ SecretId: secretPath });
       const response = await this.secretsClient.send(command);
-      return response.SecretString || Buffer.from(response.SecretBinary).toString();
+      const secretString = response.SecretString || Buffer.from(response.SecretBinary).toString();
+
+      // Handle JSON secrets (like those created by AWS console)
+      try {
+        const parsed = JSON.parse(secretString);
+        // If it's a JSON object with a single key matching the secret name, return the value
+        const keys = Object.keys(parsed);
+        if (keys.length === 1) {
+          return parsed[keys[0]];
+        }
+        return parsed;
+      } catch {
+        // Not JSON, return as-is
+        return secretString;
+      }
     } catch (error) {
       console.error(`Failed to get secret ${secretPath}:`, error.message);
       return null;
@@ -68,23 +88,39 @@ class AWSConfigService {
 
   async loadConfiguration() {
     console.log('Loading AWS configuration...');
-    
+
     const mapping = this.getConfigMapping();
     const config = {};
 
     try {
       // Load secrets
       for (const [envVar, secretPath] of Object.entries(mapping.secrets)) {
-        config[envVar] = await this.getSecret(secretPath);
+        const secretValue = await this.getSecret(secretPath);
+        config[envVar] = secretValue;
+        console.log(`Loaded secret ${envVar}: ${secretValue ? 'SUCCESS' : 'FAILED'}`);
+        if (envVar.includes('COGNITO') && secretValue) {
+          console.log(`${envVar} loaded successfully from ${secretPath}`);
+        }
       }
 
-      // Load parameters in batch
+      // Load parameters in batches (AWS limit: 10 per batch)
       const paramPaths = Object.values(mapping.parameters);
-      const parameters = await this.getParameters(paramPaths);
+      const parameters = {};
+
+      // Split into batches of 10
+      for (let i = 0; i < paramPaths.length; i += 10) {
+        const batch = paramPaths.slice(i, i + 10);
+        const batchResults = await this.getParameters(batch);
+        Object.assign(parameters, batchResults);
+      }
       
       // Map back to environment variables
       for (const [envVar, paramPath] of Object.entries(mapping.parameters)) {
         config[envVar] = parameters[paramPath];
+        console.log(`Loaded parameter ${envVar}: ${parameters[paramPath] ? 'SUCCESS' : 'FAILED'}`);
+        if (envVar.includes('COGNITO') && parameters[paramPath]) {
+          console.log(`${envVar} loaded successfully from ${paramPath}`);
+        }
       }
 
       console.log(`Loaded ${Object.keys(config).length} configuration values from AWS`);
@@ -100,6 +136,9 @@ class AWSConfigService {
     Object.entries(config).forEach(([key, value]) => {
       if (value !== null && value !== undefined) {
         process.env[key] = String(value);
+        console.log(`Set env ${key}: ${key.includes('PASSWORD') || key.includes('SECRET') ? '***' : value}`);
+      } else {
+        console.log(`Skipped env ${key}: value is null/undefined`);
       }
     });
   }
@@ -114,15 +153,16 @@ class AWSConfigService {
   }
 
   // Get environment-specific S3 bucket name
-  getS3BucketName() {
-    const envBucket = process.env.S3_BUCKET_NAME;
-    if (envBucket) return envBucket;
-    
-    return this.isProduction() ? 'video-forge-storage-prod' : 'video-forge-storage-dev';
+  async getS3BucketName() {
+    const config = await this.loadConfiguration();
+    return config.S3_BUCKET_NAME || 'video-forge-storage';
   }
 
   // Get environment-specific configuration
-  getEnvironmentConfig() {
+  async getEnvironmentConfig() {
+    // Load configuration from AWS
+    const config = await this.loadConfiguration();
+
     return {
       environment: process.env.NODE_ENV || 'development',
       isDevelopment: this.isDevelopment(),
@@ -132,33 +172,37 @@ class AWSConfigService {
         host: process.env.SERVER_HOST || (this.isDevelopment() ? 'localhost' : 'video-forge.cab432.com')
       },
       database: {
-        host: process.env.PG_HOST,
-        port: parseInt(process.env.PG_PORT || '5432'),
-        database: process.env.PG_DATABASE,
-        username: process.env.PG_USERNAME,
-        password: process.env.PG_PASSWORD
+        host: config.PG_HOST,
+        port: parseInt(config.PG_PORT || '5432'),
+        database: config.PG_DATABASE,
+        username: config.PG_USERNAME,
+        password: config.PG_PASSWORD
       },
       aws: {
         region: process.env.AWS_REGION || 'ap-southeast-2',
-        s3BucketName: this.getS3BucketName(),
-        cognitoUserPoolId: process.env.COGNITO_USER_POOL_ID,
-        cognitoClientId: process.env.COGNITO_CLIENT_ID
+        s3BucketName: config.S3_BUCKET_NAME || 'video-forge-storage',
+        cognitoUserPoolId: config.COGNITO_USER_POOL_ID,
+        cognitoClientId: config.COGNITO_CLIENT_ID,
+        cognitoClientSecret: config.COGNITO_CLIENT_SECRET
       },
       features: {
-        logLevel: this.isDevelopment() ? 'debug' : 'info',
+        logLevel: config.LOG_LEVEL || (this.isDevelopment() ? 'debug' : 'info'),
         enableHotReload: this.isDevelopment()
       }
     };
   }
 
   // Get database configuration for Sequelize
-  getDatabaseConfig() {
-    return {
-      host: process.env.PG_HOST,
-      port: parseInt(process.env.PG_PORT || '5432'),
-      database: process.env.PG_DATABASE,
-      username: process.env.PG_USERNAME,
-      password: process.env.PG_PASSWORD,
+  async getDatabaseConfig() {
+    // Load configuration from AWS
+    const awsConfig = await this.loadConfiguration();
+
+    const config = {
+      host: awsConfig.PG_HOST,
+      port: parseInt(awsConfig.PG_PORT || '5432'),
+      database: awsConfig.PG_DATABASE,
+      username: awsConfig.PG_USERNAME,
+      password: awsConfig.PG_PASSWORD,
       dialect: 'postgres',
       logging: this.isDevelopment() ? console.log : false,
       pool: {
@@ -174,6 +218,16 @@ class AWSConfigService {
         }
       }
     };
+
+    console.log('Database config:', {
+      host: config.host,
+      port: config.port,
+      database: config.database,
+      username: config.username,
+      password: config.password ? '***' : 'MISSING'
+    });
+
+    return config;
   }
 
   // Get CORS origins based on environment
@@ -190,7 +244,8 @@ class AWSConfigService {
     return [
       'https://video-forge.cab432.com',
       'http://video-forge.cab432.com:3000',
-      'http://video-forge.cab432.com:8000'
+      'http://video-forge.cab432.com:8000',
+      'd-0ifaa0s8t7.execute-api.ap-southeast-2.amazonaws.com/prod',
     ];
   }
 }

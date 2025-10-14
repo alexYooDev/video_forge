@@ -49,26 +49,28 @@ export const jobsService = {
 
   async downloadAsset(jobId, assetId, filename) {
     try {
-      const response = await api.get(
-        `/jobs/${jobId}/assets/${assetId}/download`,
-        {
-          responseType: 'blob',
-        }
-      );
+      const response = await api.get(`/jobs/${jobId}/assets/${assetId}/download`);
 
-      // Create blob URL and trigger download
-      const blob = new Blob([response.data]);
-      const url = window.URL.createObjectURL(blob);
+      // Extract the presigned URL from the response
+      const { downloadUrl, filename: serverFilename } = response.data;
+      
+      if (!downloadUrl) {
+        throw new Error('No download URL received from server');
+      }
 
+      // Use the filename from server if not provided
+      const finalFilename = filename || serverFilename || 'download';
+
+      // Create a link element and trigger download
       const link = document.createElement('a');
-      link.href = url;
-      link.download = filename;
+      link.href = downloadUrl;
+      link.download = finalFilename;
+      link.target = '_blank'; // Open in new tab for S3 URLs
       document.body.appendChild(link);
       link.click();
 
       // Cleanup
       document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
 
       return { success: true };
       

@@ -1,12 +1,10 @@
 import { useNavigate } from "react-router-dom";
 import Card from "../ui/Card";
 import Button from "../ui/Button";
-import { Play, Download, Tag, Eye, ChevronRight } from "lucide-react";
-import { useState } from "react";
+import { Download, ChevronRight } from "lucide-react";
 
 const VideoList = ({videos}) => {
     const navigate = useNavigate();
-    const [hoveredVideo, setHoveredVideo] = useState(null);
 
     const handleClickSelect = (video) => {
         const videoUrl = video.file;
@@ -21,11 +19,9 @@ const VideoList = ({videos}) => {
     return (
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
             {videos.map((video) => (
-                <Card 
-                    key={video.id} 
+                <Card
+                    key={video.id}
                     className="group overflow-hidden hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1 bg-white border border-gray-200"
-                    onMouseEnter={() => setHoveredVideo(video.id)}
-                    onMouseLeave={() => setHoveredVideo(null)}
                 >
                     {/* Video Thumbnail Section */}
                     <div className="relative overflow-hidden bg-gray-100 aspect-video">

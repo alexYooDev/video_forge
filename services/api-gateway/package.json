@@ -1,0 +1,48 @@
+{
+  "name": "api-gateway",
+  "version": "1.0.0",
+  "description": "VideoForge API Gateway - Handles authentication, job management, and client serving",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "dev:local": "NODE_ENV=development nodemon src/server.js",
+    "dev:prod": "NODE_ENV=production node src/server.js"
+  },
+  "keywords": [
+    "api-gateway",
+    "videoforge",
+    "microservices"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@aws-sdk/client-cognito-identity-provider": "^3.887.0",
+    "@aws-sdk/client-s3": "^3.658.1",
+    "@aws-sdk/client-secrets-manager": "^3.658.1",
+    "@aws-sdk/client-sqs": "^3.658.1",
+    "@aws-sdk/client-ssm": "^3.658.1",
+    "@aws-sdk/s3-request-presigner": "^3.658.1",
+    "axios": "^1.11.0",
+    "bcryptjs": "^3.0.2",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.1",
+    "express": "^5.1.0",
+    "fs-extra": "^11.3.2",
+    "helmet": "^8.1.0",
+    "http-errors": "^2.0.0",
+    "joi": "^18.0.1",
+    "jsonwebtoken": "^9.0.2",
+    "jwk-to-pem": "^2.0.7",
+    "morgan": "^1.10.1",
+    "pg": "^8.11.3",
+    "redis": "^5.8.2",
+    "sequelize": "^6.37.3",
+    "uuid": "^11.1.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10"
+  }
+}

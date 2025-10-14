@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import api from '../services/api';
 
 export const useRealtimeJobs = (enabled = true) => {
@@ -9,7 +9,7 @@ export const useRealtimeJobs = (enabled = true) => {
   const reconnectTimeoutRef = useRef(null);
   const mountedRef = useRef(true);
 
-  const connect = () => {
+  const connect = useCallback(() => {
     if (!enabled || !mountedRef.current || eventSourceRef.current) return;
 
     try {
@@ -118,7 +118,7 @@ export const useRealtimeJobs = (enabled = true) => {
       console.error('Failed to establish SSE connection:', error);
       setConnectionStatus('error');
     }
-  };
+  }, [enabled]);
 
   const disconnect = () => {
     if (eventSourceRef.current) {
@@ -143,7 +143,7 @@ export const useRealtimeJobs = (enabled = true) => {
       mountedRef.current = false;
       disconnect();
     };
-  }, [enabled]);
+  }, [enabled, connect]);
 
   // Clear old job updates after 10 seconds
   useEffect(() => {

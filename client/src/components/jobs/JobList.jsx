@@ -1,9 +1,7 @@
 import React, { useState } from 'react';
 import { useJobs } from '../../hooks/useJobs';
-// import { JOB_STATUS } from '../../utils/constants';
 import JobCard from './JobCard';
 import Button from '../ui/Button';
-import Layout from '../layout/Layout';
 import SystemStats from '../ui/SystemStats';
 
 const JobList = () => {
@@ -15,7 +13,6 @@ const JobList = () => {
   const handleDeleteJob = async (jobId) => {
     try {
       const result = await deleteJob(jobId);
-      console.log(result);
       if (!result.success) {
         alert(result.error);
       }
@@ -80,8 +77,7 @@ const JobList = () => {
   }
 
   return (
-    <Layout>
-      <div className='space-y-6'>
+    <div className='space-y-6'>
         {/* Header */}
         <div className='flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0'>
           <div>
@@ -211,7 +207,6 @@ const JobList = () => {
           </div>
         )}
       </div>
-    </Layout>
   );
 };
 

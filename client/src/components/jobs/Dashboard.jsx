@@ -9,7 +9,6 @@ const Dashboard = () => {
   const {
     createJob,
     stats,
-    loading: jobsLoading,
     refetchAll
   } = useJobs();
   const [creatingJob, setCreatingJob] = useState(false);
@@ -87,7 +86,7 @@ const Dashboard = () => {
 
       {/* Stats Cards */}
       {totalJobs > 0 && (
-        <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6'>
+        <div className='grid sm:grid-cols-2 lg:grid-cols-4 gap-6'>
           <Card padding='p-6'>
             <div className='text-center'>
               <div className='text-3xl font-bold text-gray-900'>
@@ -144,7 +143,7 @@ const Dashboard = () => {
             <div className='grid grid-cols-1 md:grid-cols-3 gap-6 mt-6'>
               <div className='text-center'>
                 <div className='w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3'>
-                  <span className='text-2xl'>1.</span>
+                  <span className='text-2xl'>1</span>
                 </div>
                 <h4 className='font-medium text-gray-900 mb-2'>Create a Job</h4>
                 <p className='text-sm text-gray-600'>
@@ -155,7 +154,7 @@ const Dashboard = () => {
 
               <div className='text-center'>
                 <div className='w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3'>
-                  <span className='text-2xl'>2.</span>
+                  <span className='text-2xl'>2</span>
                 </div>
                 <h4 className='font-medium text-gray-900 mb-2'>
                   Watch Processing
@@ -168,7 +167,7 @@ const Dashboard = () => {
 
               <div className='text-center'>
                 <div className='w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-3'>
-                  <span className='text-2xl'>3.</span>
+                  <span className='text-2xl'>3</span>
                 </div>
                 <h4 className='font-medium text-gray-900 mb-2'>
                   Download Results

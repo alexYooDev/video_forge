@@ -10,13 +10,7 @@ Your app is ready for production! Follow these steps:
 
 ## Deployment Steps
 
-### 1. Update SSH Key Path
-Edit `deploy-to-ec2.sh` and update line 13 with your actual key filename:
-```bash
-SSH_KEY_PATH="~/.ssh/YOUR-ACTUAL-KEY-NAME.pem"
-```
-
-### 2. Build and Push Docker Images
+### 1. Build and Push Docker Images
 ```bash
 # Make sure you're logged into AWS
 aws configure  # if not already configured
@@ -30,8 +24,8 @@ aws configure  # if not already configured
 # Set production environment
 cp .env.production .env
 
-# Deploy to EC2
-./deploy-to-ec2.sh
+# Deploy using docker-compose or your preferred method
+# (Note: deploy-to-ec2.sh script has been removed)
 ```
 
 ### 4. Verify Deployment
@@ -96,7 +90,8 @@ aws ecr get-login-password --region ap-southeast-2 | docker login --username AWS
 ## 📞 Quick Commands Reference
 ```bash
 # Redeploy after changes
-./prepare-ecr.sh && ./deploy-to-ec2.sh
+# Deploy using docker-compose after ECR preparation
+./prepare-ecr.sh
 
 # Check logs
 ssh -i ~/.ssh/your-key.pem ec2-user@54.206.200.144 'cd ~/video_forge && docker-compose logs --tail=50'

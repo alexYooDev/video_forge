@@ -41,7 +41,7 @@ Your application makes relevant use of **two distinct** cloud data persistence s
 - **Block and file storage** (EBS, EFS)
 
 **Important Notes:**
-- With S3, do not use public buckets for client access. Instead, use pre-signed URLs or handle requests for objects through your server
+
 - For RDS instances: Tag with key `purpose` set to `assessment-2` and `qut-username` set to your full QUT username (e.g., `n1234567@qut.edu.au`). Teaching staff may delete old or improperly tagged RDS instances to make room for students
 
 ### Authentication with Cognito (3 marks)

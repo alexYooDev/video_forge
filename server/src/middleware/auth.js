@@ -2,9 +2,7 @@
 const authService = require('../services/authService');
 const cognitoService = require('../services/cognitoService');
 
-// KISS: Simple helper to check if Cognito is configured
-const useCognito = !!(process.env.COGNITO_USER_POOL_ID && process.env.COGNITO_CLIENT_ID);
-
+// Cognito-only authentication middleware
 const authenticate = async (req, res, next) => {
     try {
         const authHeader = req.headers.authorization;
@@ -14,17 +12,11 @@ const authenticate = async (req, res, next) => {
 
         const token = authHeader.split(' ')[1];
 
-        // DRY: Single pattern for token verification with group claims
-        let decoded;
-        if (useCognito) {
-            try {
-                decoded = await cognitoService.verifyTokenWithPermissions(token);
-            } catch (cognitoError) {
-                decoded = authService.verifyToken(token);
-            }
-        } else {
-            decoded = authService.verifyToken(token);
-        }
+        // Use Cognito token verification with permissions
+        const decoded = await cognitoService.verifyTokenWithPermissions(token);
+
+        // Ensure user exists in local database for Cognito users
+        await authService.ensureUserExists(decoded);
 
         req.user = decoded;
         next();

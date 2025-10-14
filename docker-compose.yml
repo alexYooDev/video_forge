@@ -9,22 +9,25 @@ services:
     platform: linux/amd64
     container_name: videoforge_server
     restart: unless-stopped
+    network_mode: host
     env_file:
       - .env.production
     environment:
       NODE_ENV: production
       PORT: 8000
-      JWT_SECRET: ${JWT_SECRET:-v8CH5wbdp9iPJHyBXQA2a8ALW58QJ9Ek}
+      # AWS Configuration
+      AWS_REGION: ${AWS_REGION:-ap-southeast-2}
+      # Application Configuration (non-sensitive values from Parameter Store)
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
       MAX_CONCURRENT_JOBS: ${MAX_CONCURRENT_JOBS:-2}
       APP_BASE_URL: ${APP_BASE_URL:-http://video-forge.cab432.com:8000}
       CLIENT_HOST: ${CLIENT_HOST:-video-forge.cab432.com:3000}
-      PIXABAY_API_KEY: ${PIXABAY_API_KEY:-51815028-d9f2434e9b26002e4b2bd4fa4}
       SAMPLE_VIDEO_URL: ${SAMPLE_VIDEO_URL:-https://cdn.pixabay.com/video/2024/03/22/205119-926527959_large.mp4}
-    networks:
-      - videoforge_network
-    ports:
-      - "${SERVER_PORT:-8000}:8000"
+      # FFmpeg Settings
+      FFMPEG_THREADS: ${FFMPEG_THREADS:-4}
+      FFMPEG_PRESET: ${FFMPEG_PRESET:-medium}
+      FFMPEG_CRF: ${FFMPEG_CRF:-23}
+    # AWS IAM role for container (using EC2 instance profile)
     # No local database dependency - using external PostgreSQL
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
@@ -38,14 +41,15 @@ services:
     platform: linux/amd64
     container_name: videoforge_client
     restart: unless-stopped
+    network_mode: host
+    env_file:
+      - .env.production
     environment:
-      SERVER_HOST: ${SERVER_HOST:-server}
+      PORT: ${CLIENT_PORT:-80}
+      SERVER_HOST: ${SERVER_HOST:-video-forge.cab432.com}
+      REACT_APP_API_BASE_URL: ${REACT_APP_API_BASE_URL:-http://video-forge.cab432.com:8000/api}
       REACT_APP_PIXABAY_API_KEY: ${REACT_APP_PIXABAY_API_KEY:-51815028-d9f2434e9b26002e4b2bd4fa4}
       REACT_APP_PIXABAY_BASE_URL: ${REACT_APP_PIXABAY_BASE_URL:-https://pixabay.com/api/videos/}
-    networks:
-      - videoforge_network
-    ports:
-      - "${CLIENT_PORT:-3000}:80"
     depends_on:
       - server
     healthcheck:
@@ -54,7 +58,5 @@ services:
       timeout: 10s
       retries: 3
 
-networks:
-  videoforge_network:
-    driver: bridge
+# Networks not needed with host networking
 

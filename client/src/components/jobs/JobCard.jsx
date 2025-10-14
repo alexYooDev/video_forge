@@ -207,7 +207,7 @@ const JobCard = ({ job, onDelete, onRefresh }) => {
                         {getAssetTypeLabel(asset.asset_type)}
                       </p>
                       <p className='text-xs text-gray-500'>
-                        {formatFileSize(asset.size_bytes)}
+                        {formatFileSize(asset.file_size)}
                       </p>
                     </div>
                     <div className='flex justify-start'>

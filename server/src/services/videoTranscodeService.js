@@ -1,7 +1,5 @@
 /**
- * VideoTranscodeService - Single Responsibility: Video transcoding operations
- * SOLID: Single responsibility for FFmpeg operations
- * DRY: Centralized transcoding logic
+ * VideoTranscodeService: Video transcoding operations
  */
 
 const ffmpeg = require('fluent-ffmpeg');
@@ -12,6 +10,52 @@ const { ASSET_TYPES } = require('../utils/constants');
 const { InternalServerError } = require('../utils/errors');
 
 class VideoTranscodeService {
+  
+  async getFileSize(filePath) {
+    try {
+      const stats = await fs.stat(filePath);
+      return stats.size;
+    } catch (error) {
+      console.error(`Failed to get file size for ${filePath}:`, error);
+      return null;
+    }
+  }
+
+  async getVideoMetadata(filePath) {
+    return new Promise((resolve, reject) => {
+      ffmpeg.ffprobe(filePath, (err, metadata) => {
+        if (err) {
+          console.error('Error getting video metadata:', err);
+          resolve({});
+          return;
+        }
+
+        const videoStream = metadata.streams.find(stream => stream.codec_type === 'video');
+        const audioStream = metadata.streams.find(stream => stream.codec_type === 'audio');
+
+        const result = {
+          duration: metadata.format.duration ? parseFloat(metadata.format.duration) : null,
+          format: metadata.format.format_name,
+          resolution: videoStream ? `${videoStream.width}x${videoStream.height}` : null,
+          bitrate: metadata.format.bit_rate ? parseInt(metadata.format.bit_rate / 1000) : null,
+          metadata: {
+            video: videoStream ? {
+              codec: videoStream.codec_name,
+              fps: videoStream.r_frame_rate,
+              bitrate: videoStream.bit_rate ? parseInt(videoStream.bit_rate / 1000) : null
+            } : null,
+            audio: audioStream ? {
+              codec: audioStream.codec_name,
+              bitrate: audioStream.bit_rate ? parseInt(audioStream.bit_rate / 1000) : null,
+              sample_rate: audioStream.sample_rate
+            } : null
+          }
+        };
+
+        resolve(result);
+      });
+    });
+  }
   
   getTranscodeSettings(format) {
     const settings = {
@@ -48,12 +92,21 @@ class VideoTranscodeService {
             progressCallback(Math.round(progress.percent));
           }
         })
-        .on('end', () => {
+        .on('end', async () => {
           console.log(`Transcoding completed for ${format}: ${outputPath}`);
+          const fileSize = await this.getFileSize(outputPath);
+          const metadata = await this.getVideoMetadata(outputPath);
+          const settings = this.getTranscodeSettings(format);
+
           resolve({
             path: outputPath,
             format: format,
-            filename: outputFileName
+            filename: outputFileName,
+            size: fileSize,
+            duration: metadata.duration,
+            resolution: settings.resolution,
+            bitrate: parseInt(settings.videoBitrate.replace('k', '')),
+            metadata: metadata.metadata
           });
         })
         .on('error', (err, stdout, stderr) => {
@@ -113,12 +166,16 @@ class VideoTranscodeService {
           folder: '/tmp',
           size: '320x240'
         })
-        .on('end', () => {
+        .on('end', async () => {
           console.log('Thumbnail generated successfully');
+          const fileSize = await this.getFileSize(outputPath);
           resolve({
             path: outputPath,
             format: 'THUMBNAIL',
-            filename: outputFileName
+            filename: outputFileName,
+            size: fileSize,
+            resolution: '320x240',
+            format_type: 'jpg'
           });
         })
         .on('error', (err) => {
@@ -139,12 +196,17 @@ class VideoTranscodeService {
           '-t', '3'
         ])
         .output(outputPath)
-        .on('end', () => {
+        .on('end', async () => {
           console.log('GIF preview generated successfully');
+          const fileSize = await this.getFileSize(outputPath);
           resolve({
             path: outputPath,
             format: 'GIF',
-            filename: outputFileName
+            filename: outputFileName,
+            size: fileSize,
+            duration: 3,
+            resolution: '320x?',
+            format_type: 'gif'
           });
         })
         .on('error', (err) => {

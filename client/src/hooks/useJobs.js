@@ -37,6 +37,8 @@ export const useJobs = (autoRefresh = true) => {
       const response = await jobsService.createJob(jobData);
       // Add new job to the beginning of the list - fix format mismatch
       setJobs((prev) => [response.job, ...prev]);
+      // Refresh stats to reflect the new job
+      await fetchStats();
       return { success: true, data: response.job };
     } catch (error) {
       return { success: false, error: error.message };
@@ -49,6 +51,8 @@ export const useJobs = (autoRefresh = true) => {
       const result = await jobsService.deleteJob(jobId);
       console.log(result);
       setJobs((prev) => prev.filter((job) => job.id !== jobId));
+      // Refresh stats to reflect the deleted job
+      await fetchStats();
       return { success: true };
     } catch (error) {
       return { success: false, error: error.message };
@@ -58,9 +62,17 @@ export const useJobs = (autoRefresh = true) => {
   const refreshJob = async (jobId) => {
     try {
       const response = await jobsService.getJob(jobId);
+      const oldJob = jobs.find(job => job.id === jobId);
+      const newJob = response.job;
+
       setJobs((prev) =>
-        prev.map((job) => (job.id === jobId ? response.job : job))
+        prev.map((job) => (job.id === jobId ? newJob : job))
       );
+
+      // If job status changed, refresh stats to reflect the change
+      if (oldJob && oldJob.status !== newJob.status) {
+        await fetchStats();
+      }
     } catch (error) {
       console.error('Failed to refresh job:', error);
     }

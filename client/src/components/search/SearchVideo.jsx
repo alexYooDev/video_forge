@@ -6,7 +6,6 @@ import { useVideos } from "../../context/VideoContext";
 import { Search, Video, Play, Sparkles } from "lucide-react";
 
 import VideoList from "./VideoList";
-import Layout from "../layout/Layout";
 
 const SearchBar = () => {
     const [searchWord, setSearchWord] = useState('');
@@ -48,8 +47,7 @@ const SearchBar = () => {
     const popularSearches = ['nature', 'city', 'ocean', 'mountains', 'technology', 'people'];
 
     return (
-        <Layout>
-            <div className="max-w-4xl mx-auto">
+        <div className="max-w-4xl mx-auto">
                 {/* Hero Section */}
                 <div className="text-center mb-12">
                     <h1 className="text-2xl font-bold text-gray-900 mb-4">
@@ -179,7 +177,6 @@ const SearchBar = () => {
                     </div>
                 )}
             </div>
-        </Layout>
     );
 }
 

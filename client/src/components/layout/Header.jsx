@@ -46,29 +46,45 @@ const Header = () => {
             <Link
               to='/'
               className={`${
-                location.pathname === '/' ? 'text-gray-900' : 'text-gray-500'
-              } hover:text-primary-600 px-2 sm:px-3 py-2 rounded-md text-sm font-medium`}
+                location.pathname === '/' ? 'text-gray-900 font-bold' : 'text-gray-600'
+              } hover:text-primary-600 px-2 sm:px-3 py-2 rounded-md text-sm font-semibold transition-colors`}
             >
               Dashboard
             </Link>
-            <Link
-              to='/search-video'
-              className={`${
-                location.pathname === '/search-video'
-                  ? 'text-gray-900'
-                  : 'text-gray-500'
-              } hover:text-primary-600 px-2 sm:px-3 py-2 rounded-md text-sm font-medium`}
-            >
-              Search videos
-            </Link>
-            <Link
-              to='/jobs'
-              className={`${
-                location.pathname === '/jobs' ? 'text-gray-900' : 'text-gray-500'
-              } hover:text-primary-600 px-2 sm:px-3 py-2 rounded-md text-sm font-medium`}
-            >
-              Transcoded List
-            </Link>
+            {user?.groups?.includes('user') && (
+              <>
+                <Link
+                  to='/upload'
+                  className={`${
+                    location.pathname === '/upload'
+                      ? 'text-gray-900 font-bold'
+                      : 'text-gray-600'
+                  } hover:text-primary-600 px-2 sm:px-3 py-2 rounded-md text-sm font-semibold transition-colors`}
+                >
+                  Upload
+                </Link>
+                <Link
+                  to='/gallery'
+                  className={`${
+                    location.pathname.startsWith('/gallery') || location.pathname.startsWith('/video/')
+                      ? 'text-gray-900 font-bold'
+                      : 'text-gray-600'
+                  } hover:text-primary-600 px-2 sm:px-3 py-2 rounded-md text-sm font-semibold transition-colors`}
+                >
+                  Gallery
+                </Link>
+                <Link
+                  to='/jobs'
+                  className={`${
+                    location.pathname === '/jobs'
+                      ? 'text-gray-900 font-bold'
+                      : 'text-gray-600'
+                  } hover:text-primary-600 px-2 sm:px-3 py-2 rounded-md text-sm font-semibold transition-colors`}
+                >
+                  My Videos
+                </Link>
+              </>
+            )}
           </nav>
 
           {/* User Menu */}
@@ -76,21 +92,25 @@ const Header = () => {
             <div className='flex items-center space-x-3'>
               <div className='flex flex-col text-right'>
                 <span className='text-sm font-medium text-gray-900'>
-                  {user?.email}
+                  {user?.username || 'User'}
                 </span>
                 <span className='text-xs text-gray-500 capitalize'>
-                  {user?.role}
+                  {user?.role || user?.group || 'user'}
                 </span>
               </div>
               <div className='w-8 h-8 bg-primary-600 rounded-full flex items-center justify-center'>
-                <span className='text-sm font-medium text-black'>
-                  {user?.email?.split('@')[0]}
+                <span className='text-sm font-medium text-white'>
+                  {(user?.email?.split('@')[0] || user?.username || 'U')
+                    .charAt(0)
+                    .toUpperCase()}
                 </span>
               </div>
             </div>
-            {user && <Button variant='outline' size='sm' onClick={handleLogout}>
-              Sign out
-            </Button>}
+            {user && (
+              <Button variant='outline' size='sm' onClick={handleLogout}>
+                Sign out
+              </Button>
+            )}
           </div>
         </div>
       </div>

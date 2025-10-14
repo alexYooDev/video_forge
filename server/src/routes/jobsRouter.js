@@ -17,6 +17,10 @@ router.post('/load-test', jobController.runLoadTest);
 // Admin routes
 router.get('/admin/stats', requireAuth('admin'), jobController.getAdminJobStats);
 router.get('/admin/all', requireAuth('admin'), jobController.getAllJobsAdmin);
+router.get('/admin/processing-status', requireAuth('admin'), jobController.getProcessingStatus);
+router.get('/admin/recent-activity', requireAuth('admin'), jobController.getRecentActivity);
+router.post('/admin/restart-failed', requireAuth('admin'), jobController.restartFailedJobs);
+router.delete('/admin/cleanup-old', requireAuth('admin'), jobController.cleanupOldJobs);
 router.delete('/admin/:id', requireAuth('admin'), jobController.deleteJobAdmin);
 
 // video processing

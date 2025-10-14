@@ -14,7 +14,6 @@
   - Port 8000 (API): 0.0.0.0/0
   ```
 - [ ] Create/download EC2 Key Pair (.pem file)
-- [ ] Update `deploy-to-ec2.sh` with your key path
 - [ ] Test SSH connection: `ssh -i your-key.pem ec2-user@3.25.84.108`
 
 ### 2. 🐳 Docker Registry (Choose One Option)
@@ -53,8 +52,8 @@
 # 1. Set production environment
 cp .env.production .env
 
-# 2. Run deployment script
-./deploy-to-ec2.sh
+# 2. Deploy using docker-compose or your preferred method
+# (Note: deploy-to-ec2.sh script has been removed)
 
 # 3. Monitor deployment
 ssh -i your-key.pem ec2-user@54.206.200.144

@@ -3,11 +3,9 @@ import { SUPPORTED_FORMATS } from '../../utils/constants';
 import Button from '../ui/Button';
 import Card from '../ui/Card';
 import api from '../../services/api';
-import { useNavigate } from 'react-router-dom';
 
 const JobForm = ({ onSubmit, videoUrl, loading = false }) => {
 
-  const navigate = useNavigate();
 
   const [formData, setFormData] = useState({
     inputSource: '',
@@ -19,9 +17,9 @@ const JobForm = ({ onSubmit, videoUrl, loading = false }) => {
 
   useEffect(() => {
     if (videoUrl && videoUrl !== '') {
-      setFormData({...formData, inputSource: videoUrl});
+      setFormData(prev => ({...prev, inputSource: videoUrl}));
     }
-  }, []);
+  }, [videoUrl]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -90,11 +88,11 @@ const JobForm = ({ onSubmit, videoUrl, loading = false }) => {
       const response = await api.post('/jobs/load-test', {
         concurrent: 5,
         videoUrl: 'local-sample.mp4',
-        formats: ['1080p', '720p', '480p']
+        formats: ['4k', '1080p', '720p', '480p']
       });
       
       if (response.data.success) {
-        alert('Load test started! Check CPU monitoring for results.');
+        alert('Load test started! Check CPU monitoring for results. Run "htop" in ec2 instance');
       }
     } catch (error) {
       console.error('Load test failed:', error);
@@ -224,7 +222,7 @@ const JobForm = ({ onSubmit, videoUrl, loading = false }) => {
             onClick={() =>
               setFormData({
                 inputSource: 'local-sample.mp4',
-                outputFormats: ['1080p', '720p', '480p'],
+                outputFormats: ['4k', '1080p', '720p', '480p'],
               })
             }
           >
