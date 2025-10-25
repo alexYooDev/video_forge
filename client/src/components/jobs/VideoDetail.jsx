@@ -21,7 +21,7 @@ const VideoDetail = () => {
     setError(null);
 
     try {
-      const response = await api.get(`/api/gallery/videos/${id}`);
+      const response = await api.get(`/gallery/videos/${id}`);
       setVideo(response.data);
     } catch (err) {
       console.error('Failed to load video:', err);

@@ -37,15 +37,30 @@ const UploadPage = () => {
 
     setProcessing(true);
     try {
-      // Step 1: Confirm upload with gallery-service
-      await api.post('/api/upload/confirm', {
+      // Step 1: Extract video metadata
+      console.log('Extracting video metadata...');
+      let metadata = {};
+      try {
+        const metadataResponse = await api.post('/metadata/extract', {
+          s3Key: uploadedFile.s3Key
+        });
+        metadata = metadataResponse.data.metadata;
+        console.log('Metadata extracted:', metadata);
+      } catch (metadataError) {
+        console.warn('Failed to extract metadata, continuing without it:', metadataError);
+        // Continue even if metadata extraction fails
+      }
+
+      // Step 2: Confirm upload with gallery-service (with metadata)
+      await api.post('/upload/confirm', {
         s3Key: uploadedFile.s3Key,
         title: videoTitle || uploadedFile.filename,
         description: videoDescription,
-        visibility: visibility
+        visibility: visibility,
+        metadata: metadata
       });
 
-      // Step 2: Create transcoding job with api-gateway
+      // Step 3: Create transcoding job
       const result = await createJob({
         inputSource: uploadedFile.s3Key,
         outputFormats: selectedFormats,
@@ -251,7 +266,7 @@ const UploadPage = () => {
                       className={`flex items-center justify-center text-sm font-bold rounded-lg py-3 px-4 border-2 transition-all ${
                         selectedFormats.includes(format)
                           ? 'bg-primary-600 text-white border-primary-600 shadow-md'
-                          : 'bg-white text-black border-gray-300 hover:border-gray-400'
+                          : 'bg-white text-gray-900 border-gray-400 hover:border-gray-600 hover:bg-gray-50'
                       }`}
                     >
                       {format.toUpperCase()}
@@ -270,9 +285,10 @@ const UploadPage = () => {
             <div className="flex gap-3 pt-4 border-t border-gray-200">
               <Button
                 onClick={handleStartProcessing}
+                variant='primary'
                 disabled={processing || selectedFormats.length === 0 || !videoTitle.trim()}
                 loading={processing}
-                className="flex-1 font-semibold"
+                className="flex-1 font-semibold bg-primary-600 hover:bg-primary-700 text-white border-2 border-primary-600"
               >
                 {processing ? 'Starting Processing...' : '🚀 Start Processing'}
               </Button>
@@ -284,7 +300,7 @@ const UploadPage = () => {
                   setVideoDescription('');
                 }}
                 disabled={processing}
-                className="font-semibold"
+                className="font-semibold bg-white text-gray-900 border-2 border-gray-400 hover:bg-gray-50 hover:border-gray-600"
               >
                 Upload Another
               </Button>

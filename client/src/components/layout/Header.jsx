@@ -37,7 +37,11 @@ const Header = () => {
                   />
                 </svg>
               </div>
-              <h1 className='text-xl font-bold text-gray-900'>Video Forge</h1>
+              <h1 className='text-xl font-bold text-gray-900'>
+                <Link to='/'>
+                  Video Forge
+                </Link>
+              </h1>
             </div>
           </div>
 
@@ -46,7 +50,9 @@ const Header = () => {
             <Link
               to='/'
               className={`${
-                location.pathname === '/' ? 'text-gray-900 font-bold' : 'text-gray-600'
+                location.pathname === '/'
+                  ? 'text-gray-900 font-bold'
+                  : 'text-gray-600'
               } hover:text-primary-600 px-2 sm:px-3 py-2 rounded-md text-sm font-semibold transition-colors`}
             >
               Dashboard
@@ -64,9 +70,20 @@ const Header = () => {
                   Upload
                 </Link>
                 <Link
+                  to='/search-video'
+                  className={`${
+                    location.pathname.startsWith('/search-video')
+                      ? 'text-gray-900 font-bold'
+                      : 'text-gray-600'
+                  } hover:text-primary-600 px-2 sm:px-3 py-2 rounded-md text-sm font-semibold transition-colors`}
+                >
+                  Search Video
+                </Link>
+                <Link
                   to='/gallery'
                   className={`${
-                    location.pathname.startsWith('/gallery') || location.pathname.startsWith('/video/')
+                    location.pathname.startsWith('/gallery') ||
+                    location.pathname.startsWith('/video/')
                       ? 'text-gray-900 font-bold'
                       : 'text-gray-600'
                   } hover:text-primary-600 px-2 sm:px-3 py-2 rounded-md text-sm font-semibold transition-colors`}

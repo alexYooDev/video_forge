@@ -163,7 +163,7 @@ class Logger {
 }
 
 // Export singleton instances for each service
-const apiLogger = new Logger('API-Gateway');
+const apiLogger = new Logger('Job-Service');
 const processorLogger = new Logger('Video-Processor');
 
 module.exports = {

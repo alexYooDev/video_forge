@@ -19,7 +19,7 @@ const VideoPlayer = ({ jobId }) => {
     setTranscodingMessage(null);
 
     try {
-      const response = await api.get(`/api/gallery/videos/${jobId}/stream`);
+      const response = await api.get(`/gallery/videos/${jobId}/stream`);
 
       // Handle successful response with stream URL
       setStreamUrl(response.data.streamUrl);

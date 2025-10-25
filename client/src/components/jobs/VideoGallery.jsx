@@ -18,7 +18,7 @@ const VideoGallery = () => {
     setError(null);
 
     try {
-      const response = await api.get('/api/gallery/videos', {
+      const response = await api.get('/gallery/videos', {
         params: {
           visibility: filter === 'public' ? 'public' : undefined,
           limit: 50

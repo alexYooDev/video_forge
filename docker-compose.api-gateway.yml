@@ -1,0 +1,93 @@
+version: '3.8'
+
+services:
+  # Redis Cache Service
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # API Gateway Service (I/O intensive)
+  api-gateway:
+    image: 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com/video-forge-api-gateway:latest
+    platform: linux/amd64
+    container_name: api-gateway
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      NODE_ENV: production
+      AWS_REGION: ap-southeast-2
+      SERVER_PORT: 8080
+      SQS_QUEUE_NAME: video-forge-video-processing-queue
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      CACHE_ENABLED: "true"
+      # Lambda Function URLs
+      GALLERY_SERVICE_URL: https://xipqsagjkfm3qc666xjj5xz4n40gyuju.lambda-url.ap-southeast-2.on.aws
+      STREAMING_SERVICE_URL: https://zlhtbz7nh3tktqvbsb3jbadrum0fihxo.lambda-url.ap-southeast-2.on.aws
+      # Database
+      DB_HOST: database-1-instance-1.ce2haupt2cta.ap-southeast-2.rds.amazonaws.com
+      DB_NAME: cohort_2025
+      DB_USER: s458
+      DB_PASSWORD: 4T5gnYmROThF
+      # S3 and Cognito
+      S3_BUCKET_NAME: video-forge-storage
+      COGNITO_USER_POOL_ID: ap-southeast-2_jft50FBre
+      COGNITO_CLIENT_ID: 59ff9f0j33qp7al3vje4j4isc0
+      JWT_SECRET: v8CH5wbdp9iPJHyBXQA2a8ALW58QJ9Ek
+    depends_on:
+      - redis
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Client Service (React frontend)
+  client:
+    image: 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com/12159069-video-forge-client:latest
+    platform: linux/amd64
+    container_name: client
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    environment:
+      REACT_APP_API_BASE_URL: https://video-forge-v2.cab432.com
+      REACT_APP_PIXABAY_API_KEY: ${REACT_APP_PIXABAY_API_KEY:-51815028-d9f2434e9b26002e4b2bd4fa4}
+      REACT_APP_PIXABAY_BASE_URL: https://pixabay.com/api/videos/
+      SERVER_HOST: api-gateway
+    depends_on:
+      - api-gateway
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  redis-data:

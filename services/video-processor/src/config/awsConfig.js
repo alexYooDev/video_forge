@@ -196,15 +196,20 @@ class AWSConfigService {
 
   // Get database configuration for Sequelize
   async getDatabaseConfig() {
-    // Load configuration from AWS
-    const awsConfig = await this.loadConfiguration();
+    // Try to load configuration from AWS, but fall back to environment variables
+    let awsConfig = {};
+    try {
+      awsConfig = await this.loadConfiguration();
+    } catch (error) {
+      processorLogger.warn('AWS config load failed, using environment variables', { error: error.message });
+    }
 
     const config = {
-      host: awsConfig.PG_HOST,
-      port: parseInt(awsConfig.PG_PORT || '5432'),
-      database: awsConfig.PG_DATABASE,
-      username: awsConfig.PG_USERNAME,
-      password: awsConfig.PG_PASSWORD,
+      host: awsConfig.PG_HOST || process.env.DB_HOST,
+      port: parseInt(awsConfig.PG_PORT || process.env.DB_PORT || '5432'),
+      database: awsConfig.PG_DATABASE || process.env.DB_NAME,
+      username: awsConfig.PG_USERNAME || process.env.DB_USER,
+      password: awsConfig.PG_PASSWORD || process.env.DB_PASSWORD,
       dialect: 'postgres',
       logging: this.isDevelopment() ? (msg) => processorLogger.db(msg) : false,
       pool: {
@@ -226,7 +231,8 @@ class AWSConfigService {
       port: config.port,
       database: config.database,
       username: config.username,
-      password: config.password ? '***' : 'MISSING'
+      password: config.password ? '***' : 'MISSING',
+      source: awsConfig.PG_HOST ? 'AWS' : 'ENV'
     });
 
     return config;

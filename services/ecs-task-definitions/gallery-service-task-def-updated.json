@@ -1,0 +1,78 @@
+{
+  "family": "video-forge-gallery-service",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::901444280953:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::901444280953:role/ecsTaskRole",
+  "containerDefinitions": [
+    {
+      "name": "gallery-service",
+      "image": "901444280953.dkr.ecr.ap-southeast-2.amazonaws.com/video-forge-gallery-service:latest",
+      "portMappings": [
+        {
+          "containerPort": 5000,
+          "protocol": "tcp"
+        }
+      ],
+      "essential": true,
+      "environment": [
+        {
+          "name": "PORT",
+          "value": "5000"
+        },
+        {
+          "name": "NODE_ENV",
+          "value": "production"
+        },
+        {
+          "name": "AWS_REGION",
+          "value": "ap-southeast-2"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "DB_HOST",
+          "valueFrom": "arn:aws:ssm:ap-southeast-2:901444280953:parameter/video-forge/database/postgres-host"
+        },
+        {
+          "name": "DB_PORT",
+          "valueFrom": "arn:aws:ssm:ap-southeast-2:901444280953:parameter/video-forge/database/postgres-port"
+        },
+        {
+          "name": "DB_NAME",
+          "valueFrom": "arn:aws:ssm:ap-southeast-2:901444280953:parameter/video-forge/database/postgres-database"
+        },
+        {
+          "name": "DB_USER",
+          "valueFrom": "arn:aws:ssm:ap-southeast-2:901444280953:parameter/video-forge/database/postgres-username"
+        },
+        {
+          "name": "DB_SECRET_ARN",
+          "valueFrom": "arn:aws:secretsmanager:ap-southeast-2:901444280953:secret:/video-forge/database/postgres-password"
+        },
+        {
+          "name": "S3_BUCKET_NAME",
+          "valueFrom": "arn:aws:ssm:ap-southeast-2:901444280953:parameter/video-forge/config/s3-bucket-name"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/video-forge-gallery-service",
+          "awslogs-region": "ap-southeast-2",
+          "awslogs-stream-prefix": "ecs",
+          "awslogs-create-group": "true"
+        }
+      },
+      "healthCheck": {
+        "command": ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:5000/health || exit 1"],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 60
+      }
+    }
+  ]
+}

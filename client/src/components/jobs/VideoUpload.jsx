@@ -67,7 +67,7 @@ const VideoUpload = ({ onUploadComplete }) => {
 
     try {
       // Step 1: Get pre-signed URL from gallery-service
-      const response = await api.post('/api/upload/generate-url', {
+      const response = await api.post('/upload/generate-url', {
         filename: file.name,
         contentType: file.type
       });
@@ -78,6 +78,7 @@ const VideoUpload = ({ onUploadComplete }) => {
       await axios.put(uploadUrl, file, {
         headers: {
           'Content-Type': file.type
+          // Don't send x-amz-server-side-encryption - let bucket default handle it
         },
         onUploadProgress: (progressEvent) => {
           const percentComplete = Math.round(
