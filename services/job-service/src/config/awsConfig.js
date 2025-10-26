@@ -223,7 +223,7 @@ class AWSConfigService {
       dialect: 'postgres',
       logging: this.isDevelopment() ? (msg) => apiLogger.db(msg) : false,
       pool: {
-        max: this.isDevelopment() ? 5 : 10,
+        max: this.isDevelopment() ? 5 : 5, // Reduced to prevent connection limit issues
         min: 0,
         acquire: 30000,
         idle: 10000

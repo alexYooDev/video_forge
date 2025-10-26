@@ -70,7 +70,7 @@ Use the "Find partners for assessments 2 and 3" Teams channel. Ensure you discus
 - No service interruptions during scaling (graceful degradation acceptable)
 - Deploy on ECS or EC2 (**NOT Lambda**)
 - Demonstrate scaling: 1 → 3 instances under load → back to 1 when load reduces
-- Default metric: Average CPU utilization at 70% target
+- Default metric: Average CPU utilization at 80% target
 - For EC2 single-threaded apps: Use single-CPU instance (e.g., t2.micro) with unlimited credit
 
 **Approved Services:** Auto-scaling groups (EC2), Target groups, Application Auto Scaling (ECS), CloudWatch, Lambda (for custom metrics only)

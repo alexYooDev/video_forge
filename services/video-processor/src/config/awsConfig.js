@@ -213,7 +213,7 @@ class AWSConfigService {
       dialect: 'postgres',
       logging: this.isDevelopment() ? (msg) => processorLogger.db(msg) : false,
       pool: {
-        max: this.isDevelopment() ? 5 : 10,
+        max: this.isDevelopment() ? 5 : 3, // Reduced for auto-scaling (3 instances × 3 = 9 connections)
         min: 0,
         acquire: 30000,
         idle: 10000

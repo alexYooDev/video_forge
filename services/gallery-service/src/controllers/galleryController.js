@@ -70,7 +70,7 @@ class GalleryController {
           fileSize: v.file_size,
           views: v.views,
           thumbnailUrl: v.thumbnail_url,
-          createdAt: v.created_at,
+          createdAt: v.created_at?.toISOString() || null,
           userId: v.user_id
         })),
         pagination: {
@@ -121,7 +121,7 @@ class GalleryController {
         fileSize: video.file_size,
         thumbnailUrl: video.thumbnail_url,
         views: video.views + 1,
-        createdAt: video.created_at,
+        createdAt: video.created_at?.toISOString() || null,
         userId: video.user_id
       });
     } catch (error) {
