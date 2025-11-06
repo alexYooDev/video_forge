@@ -7,6 +7,7 @@ class S3Service {
     this.s3Client = null;
     this.bucketName = process.env.S3_BUCKET_NAME;
     this.region = process.env.AWS_REGION;
+    this.cloudFrontDomain = process.env.CLOUDFRONT_DOMAIN || 'd3vlpici5fmp7i.cloudfront.net';
     this.initialized = false;
   }
 
@@ -14,15 +15,18 @@ class S3Service {
     if (this.initialized) return;
 
     // In Lambda, use the execution role's credentials automatically
-    // Only use explicit credentials if running locally
+    // Only use explicit credentials if running locally (not in Lambda environment)
     const s3Config = {
-      region: this.region,
+      region: this.region || 'ap-southeast-2',
       requestChecksumCalculation: 'WHEN_REQUIRED', // Disable automatic checksums
       responseChecksumValidation: 'WHEN_REQUIRED'
     };
 
-    // Only add credentials if explicitly provided (for local development)
-    if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
+    // Only add credentials if explicitly provided AND not running in Lambda
+    // Lambda environment is detected by AWS_EXECUTION_ENV or LAMBDA_TASK_ROOT
+    const isLambda = process.env.AWS_EXECUTION_ENV || process.env.LAMBDA_TASK_ROOT;
+
+    if (!isLambda && process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
       s3Config.credentials = {
         accessKeyId: process.env.AWS_ACCESS_KEY_ID,
         secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
@@ -32,7 +36,11 @@ class S3Service {
     this.s3Client = new S3Client(s3Config);
 
     this.initialized = true;
-    logger.info('S3 Service initialized', { useExplicitCreds: !!s3Config.credentials });
+    logger.info('S3 Service initialized', {
+      useExplicitCreds: !!s3Config.credentials,
+      isLambda: !!isLambda,
+      region: s3Config.region
+    });
   }
 
   async ensureInitialized() {
@@ -89,19 +97,12 @@ class S3Service {
       throw error;
     }
 
-    // Generate pre-signed URL
-    const command = new GetObjectCommand({
-      Bucket: this.bucketName,
-      Key: s3Key,
-      ResponseContentType: 'video/mp4',
-      ResponseContentDisposition: 'inline'
-    });
+    // Generate CloudFront URL (cached at edge locations globally)
+    const cloudFrontUrl = `https://${this.cloudFrontDomain}/${s3Key}`;
 
-    const streamUrl = await getSignedUrl(this.s3Client, command, { expiresIn });
+    logger.info('Generated CloudFront stream URL', { s3Key, cloudFrontDomain: this.cloudFrontDomain });
 
-    logger.info('Generated stream URL', { s3Key });
-
-    return streamUrl;
+    return cloudFrontUrl;
   }
 
   async fileExists(s3Key) {

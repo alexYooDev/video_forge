@@ -87,10 +87,52 @@ export const authService = {
     return localStorage.getItem('video_forge_token');
   },
 
+  getRefreshToken() {
+    return localStorage.getItem('video_forge_refresh_token');
+  },
+
   isAuthenticated() {
     const token = this.getToken();
     const user = this.getCurrentUser();
     return !!(token && user);
+  },
+
+  async refreshToken() {
+    try {
+      const refreshToken = this.getRefreshToken();
+
+      if (!refreshToken) {
+        throw new Error('No refresh token available');
+      }
+
+      const response = await api.post('/auth/refresh', { refreshToken });
+
+      if (response.status === 200 && response.data.result) {
+        const result = response.data.result;
+        const token = result.tokens.idToken;
+        const user = result.user;
+
+        // Update stored tokens
+        localStorage.setItem('video_forge_token', token);
+        localStorage.setItem('video_forge_user', JSON.stringify(user));
+        localStorage.setItem('video_forge_access_token', result.tokens.accessToken);
+        // Keep the same refresh token
+        localStorage.setItem('video_forge_refresh_token', result.tokens.refreshToken);
+
+        return { token, user };
+      }
+
+      throw new Error('Invalid response format');
+    } catch (error) {
+      // If refresh fails, clear tokens and throw error
+      localStorage.removeItem('video_forge_token');
+      localStorage.removeItem('video_forge_user');
+      localStorage.removeItem('video_forge_access_token');
+      localStorage.removeItem('video_forge_refresh_token');
+
+      const message = error.response?.data?.message || 'Token refresh failed';
+      throw new Error(message);
+    }
   },
 
   async register(email, password, username) {

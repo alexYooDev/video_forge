@@ -25,9 +25,9 @@ const AdminDashboard = () => {
             setLoading(true);
 
             const [statsRes, usersRes, jobsRes] = await Promise.all([
-                api.get('/jobs/admin/stats'),
-                api.get('/auth/users'),
-                api.get('/jobs/admin/all?limit=10')
+                api.get('/admin/jobs/stats'),
+                api.get('/admin/users'),
+                api.get('/admin/jobs/all?limit=10')
             ]);
 
             setStats(statsRes.data.stats);
@@ -58,7 +58,7 @@ const AdminDashboard = () => {
 
     const loadStorageInfo = async () => {
         try {
-            const response = await api.get('/storage/stats');
+            const response = await api.get('/admin/storage/stats');
             const stats = response.data.result;
 
             setStorageInfo({
@@ -170,7 +170,7 @@ const AdminDashboard = () => {
         if (!window.confirm('Clean up temporary files older than 24 hours? This action cannot be undone.')) return;
 
         try {
-            const response = await api.post('/storage/cleanup-temp');
+            const response = await api.post('/admin/storage/cleanup-temp');
             const result = response.data.result;
             alert(`Cleanup completed! Removed ${result.deletedCount} files, freed ${result.freedSpace} MB`);
             await loadStorageInfo(); // Refresh storage info
@@ -184,7 +184,7 @@ const AdminDashboard = () => {
         if (!window.confirm('Optimize storage by removing orphaned files? This may take a few minutes.')) return;
 
         try {
-            const response = await api.post('/storage/optimize');
+            const response = await api.post('/admin/storage/optimize');
             const result = response.data.result;
             const message = `Optimization completed!\n` +
                           `Orphaned files: ${result.orphanedFiles.deletedCount} removed, ${result.orphanedFiles.freedSpace} MB freed\n` +
@@ -207,7 +207,7 @@ const AdminDashboard = () => {
 
             if (format.toLowerCase() === 'csv') {
                 // Download CSV file
-                const response = await api.get(`/storage/report?format=csv&period=${period}`, {
+                const response = await api.get(`/admin/storage/report?format=csv&period=${period}`, {
                     responseType: 'blob'
                 });
                 const blob = new Blob([response.data], { type: 'text/csv' });
@@ -219,7 +219,7 @@ const AdminDashboard = () => {
                 window.URL.revokeObjectURL(url);
             } else {
                 // Show JSON report
-                const response = await api.get(`/storage/report?format=json&period=${period}`);
+                const response = await api.get(`/admin/storage/report?format=json&period=${period}`);
                 const report = response.data.result;
                 console.log('Storage Report:', report);
                 alert(`Storage report generated successfully! Check browser console for details.\n\nSummary:\nTotal files: ${report.bucket.totalFiles}\nTotal size: ${report.bucket.totalSize} GB`);

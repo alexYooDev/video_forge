@@ -18,11 +18,20 @@ app.use((req, res, next) => {
 });
 
 // API Gateway path fix: prepend base path if missing
-// API Gateway strips /api/gallery from path when using /{proxy+}
+// API Gateway strips /api/gallery or /api/upload from path when using /{proxy+}
 app.use((req, res, next) => {
+  const originalPath = req.path;
+
   if (!req.path.startsWith('/api/') && req.path !== '/health') {
-    req.url = '/api/gallery' + req.url;
-    logger.info(`Path adjusted to: ${req.url}`);
+    // Determine which base path to prepend based on the route
+    // Upload routes: /generate-url, /confirm
+    if (req.path.startsWith('/generate-url') || req.path.startsWith('/confirm')) {
+      req.url = '/api/upload' + req.url;
+    } else {
+      // All other routes go to gallery
+      req.url = '/api/gallery' + req.url;
+    }
+    logger.info(`Path adjusted: ${originalPath} -> ${req.url}`);
   }
   next();
 });

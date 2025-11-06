@@ -1,62 +1,111 @@
-## Introduction to VideoForge
+# Video Forge
 
-Public-Domain Video Transcoder Web App is a cloud-deployed REST API service that enables users to search legally available public-domain or royalty-free videos, and transform them into ready-to-use media assets. Unlike existing stock repositories such as Pexels or Pixabay, which only provide video downloads, this application focuses on media transformation: transcoding into multiple resolutions. By combining content discovery with CPU-intensive processing, the system demonstrates scalable media workflows and offers unique value beyond simple content hosting.
+Video Forge is a modular, microservices-based video processing application. It provides a React client, multiple backend services (auth, jobs, gallery, streaming, admin dashboard, etc.), and a video processing worker. The repository includes CloudFormation templates for AWS deployment and Dockerfiles for containerized development.
 
-## Requirements Analysis
+## Repository layout
 
-### Functional Requirements
+- `client/` — React front-end application (CRA). Contains Dockerfile and nginx config for container builds.
+- `services/` — Multiple service folders (each with its own package.json and Dockerfile when applicable):
+  - `auth-service/`
+  - `job-service/`
+  - `gallery-service/`
+  - `streaming-service/`
+  - `admin-dashboard/`
+  - `video-processor/` (worker)
+- `cloudformation/` — CloudFormation templates for deploying infrastructure (SQS, Lambdas, ASG, CloudFront, ECS, etc.) and helper scripts (`deploy.sh`, `cleanup.sh`).
+- `data/` — sample inputs/outputs and temporary files used during processing.
 
-***  Authentication *** 
-- Users can sign up, log in, and manage only their own jobs (JWT-based authentication).
+> Note: The repository is laid out to support local development (npm start for services/client) and containerized builds for production.
 
-*** Video Search & Selection ***
+## Quick requirements
 
-- Users can search public video sources (Pixabay).
+- Node.js (16+ recommended)
+- npm or yarn
+- Docker (for container builds)
+- AWS CLI and AWS credentials (for deploying CloudFormation stacks)
 
-- Results show metadata: duration, license info, etc.
+## Local development
 
-- Users select a clip to process.
+Running the client locally:
 
-*** Video Processing (CPU-intensive) ***
+```bash
+cd client
+npm install
+npm run start
+```
 
-- Users can request transcoding into multiple resolutions (1080p, 720p, 480p).
+Running a service locally (example: job-service):
 
-*** Job Management ***
+```bash
+cd services/job-service
+npm install
+npm run start
+```
 
-- Users can create jobs (processing tasks).
+Each service typically exposes a small HTTP API on a port defined in its configuration. Check the service's `src/config` or `server.js` for the exact port and environment variables.
 
-- The system tracks job status (PENDING, PROCESSING, COMPLETED, FAILED).
+## Docker / Container development
 
-- Users can cancel their own jobs.
+Build a service Docker image (example: job-service):
 
-- Users can view their job history and outputs.
+```bash
+cd services/job-service
+docker build -t video-forge-job-service .
+```
 
-*** Media Delivery ***
+Build the client image:
 
-- Processed outputs stored in /data/outputs (container-local).
+```bash
+cd client
+docker build -t video-forge-client .
+```
 
-- Users download results through REST API endpoints.
+You can run containers individually for integration testing. There is no centralized docker-compose file in the repo root; run services as needed or add a small compose file if you want a multi-container local stack.
 
-- Metadata (size, duration, license) stored in database.
+## Deployment (CloudFormation)
 
-### Non-Functional Requirements
+The `cloudformation/` folder contains YAML templates used to deploy the application to AWS. A simple deployment flow (example):
 
-- Performance: CPU usage ≥80% for ≥5 minutes under load (via FFmpeg heavy transcodes).
+1. Ensure AWS CLI is configured with appropriate credentials and region.
+2. Review `cloudformation/parameters.json` and adjust parameters for your environment.
+3. Use the provided scripts or deploy stacks directly via the AWS CLI:
 
-- Statelessness: API does not store session in memory — only DB & file storage.
+```bash
+# example: deploy master stack using a script (if configured)
+./cloudformation/deploy.sh
 
-- Usability: Simple REST API + optional React UI for searching, job submission, and result downloads.
+# or using AWS CLI
+aws cloudformation deploy --template-file cloudformation/master-stack.yaml --stack-name video-forge-master --capabilities CAPABILITY_NAMED_IAM --parameter-overrides file://cloudformation/parameters.json
+```
 
-- Security: JWT auth; users can only see their own jobs.
+Read each CloudFormation template before running to understand resource creation and costs.
 
-- Compliance: Only legally downloadable media from public/royalty-free APIs; license info must be stored and displayed.
+## Testing
 
-- Deployment: Docker container, deployed on EC2 via ECR.
+- Client tests: `cd client && npm test`
+- Service tests: check each service's `package.json` for test scripts (commonly `npm test`).
 
-- Testing: Load testing script to demonstrate CPU utilization.
+## Environment variables
 
+Many services rely on environment variables (DB connection strings, S3 buckets, AWS credentials, API keys). Check each service's `src/config` or `.env.example` (if present) for required variables.
 
-### Reference
+## Contributing
 
- video source :
-- https://gist.github.com/jsturgis/3b19447b304616f18657
+- Follow existing code style in the repo.
+- Add unit tests for new functionality.
+- When changing interfaces between services, update API docs and notify dependent services.
+- For infrastructure changes, update the CloudFormation templates and parameters accordingly.
+
+## Suggested next steps
+
+- Add a `docker-compose.yml` for easier local end-to-end testing.
+- Add an umbrella `README` per service with service-specific startup and configuration notes.
+- Add CI workflows for linting, testing, and building Docker images.
+
+## License
+
+This repository does not contain a specific license file. Add a `LICENSE` file if you plan to open-source the project.
+
+## Contact
+
+For questions about the repository structure or running the project, reach out to the repository owner or maintainers (see commit history / GitHub repo contact).

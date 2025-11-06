@@ -1,0 +1,387 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'VideoForge - EC2 Services (Job-Service and Client)'
+
+Parameters:
+  EnvironmentName:
+    Description: Environment name prefix
+    Type: String
+    Default: video-forge
+
+  KeyPairName:
+    Description: EC2 Key Pair for SSH access
+    Type: AWS::EC2::KeyPair::KeyName
+
+  VpcId:
+    Description: VPC ID
+    Type: AWS::EC2::VPC::Id
+
+  PublicSubnetId:
+    Description: Public subnet ID for EC2 instances
+    Type: AWS::EC2::Subnet::Id
+
+  SecurityGroupId:
+    Description: Security group ID for EC2 instances
+    Type: AWS::EC2::SecurityGroup::Id
+
+  IAMInstanceProfile:
+    Description: IAM Instance Profile for EC2 instances (CAB432-EC2-Role)
+    Type: String
+    Default: CAB432-EC2-Role
+
+  ECRAccountId:
+    Description: AWS Account ID for ECR
+    Type: String
+    Default: '901444280953'
+
+  ECRRegion:
+    Description: AWS Region for ECR
+    Type: String
+    Default: ap-southeast-2
+
+  # Database Configuration
+  DBHost:
+    Description: RDS database host
+    Type: String
+
+  DBPort:
+    Description: RDS database port
+    Type: String
+    Default: '5432'
+
+  DBName:
+    Description: RDS database name
+    Type: String
+    Default: cohort_2025
+
+  DBUser:
+    Description: RDS database username
+    Type: String
+    Default: s458
+
+  DBSecretArn:
+    Description: ARN of database credentials secret in Secrets Manager
+    Type: String
+
+  # S3 Configuration
+  S3BucketName:
+    Description: S3 bucket name
+    Type: String
+    Default: video-forge-storage
+
+  # SQS Configuration
+  SQSQueueURL:
+    Description: SQS queue URL for video processing
+    Type: String
+
+  # Cognito Configuration
+  CognitoUserPoolId:
+    Description: Cognito User Pool ID
+    Type: String
+
+  CognitoClientId:
+    Description: Cognito Client ID
+    Type: String
+
+  # API Gateway URL (for CORS)
+  ApiGatewayURL:
+    Description: API Gateway URL
+    Type: String
+    Default: https://9aprzwxo9g.execute-api.ap-southeast-2.amazonaws.com/prod
+
+Mappings:
+  # Ubuntu 24.04 LTS AMI IDs by region
+  RegionMap:
+    ap-southeast-2:
+      AMI: ami-001f2488b35ca8aad  # Ubuntu 24.04 LTS
+
+Resources:
+  # ============================================
+  # Job Service EC2 Instance
+  # ============================================
+  JobServiceInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t3.medium
+      ImageId: !FindInMap [RegionMap, !Ref 'AWS::Region', AMI]
+      KeyName: !Ref KeyPairName
+      IamInstanceProfile: !Ref IAMInstanceProfile
+      SecurityGroupIds:
+        - !Ref SecurityGroupId
+      SubnetId: !Ref PublicSubnetId
+      Monitoring: true
+
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -e
+
+          # Log everything
+          exec > >(tee /var/log/user-data.log)
+          exec 2>&1
+
+          echo "========================================="
+          echo "Job Service Installation Started"
+          echo "========================================="
+
+          # Update system
+          apt-get update -y
+          apt-get upgrade -y
+
+          # Install Docker
+          apt-get install -y docker.io
+          systemctl start docker
+          systemctl enable docker
+          usermod -a -G docker ubuntu
+
+          # Install AWS CLI v2
+          apt-get install -y unzip
+          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+          unzip -q awscliv2.zip
+          ./aws/install
+          rm -rf aws awscliv2.zip
+
+          # Login to ECR
+          aws ecr get-login-password --region ${ECRRegion} | docker login --username AWS --password-stdin ${ECRAccountId}.dkr.ecr.${ECRRegion}.amazonaws.com
+
+          # Pull Job Service container
+          docker pull ${ECRAccountId}.dkr.ecr.${ECRRegion}.amazonaws.com/video-forge-job-service:latest
+
+          # Create systemd service
+          cat > /etc/systemd/system/job-service.service <<'EOF'
+          [Unit]
+          Description=VideoForge Job Service
+          After=docker.service
+          Requires=docker.service
+
+          [Service]
+          Type=simple
+          Restart=always
+          RestartSec=10
+          TimeoutStartSec=300
+
+          ExecStartPre=-/usr/bin/docker stop job-service
+          ExecStartPre=-/usr/bin/docker rm job-service
+
+          ExecStart=/usr/bin/docker run --name job-service \
+            --rm \
+            -p 8080:8080 \
+            -e NODE_ENV=production \
+            -e PORT=8080 \
+            -e AWS_REGION=${AWS::Region} \
+            -e DB_HOST=${DBHost} \
+            -e DB_PORT=${DBPort} \
+            -e DB_NAME=${DBName} \
+            -e DB_USER=${DBUser} \
+            -e DB_SECRET_ARN=${DBSecretArn} \
+            -e S3_BUCKET_NAME=${S3BucketName} \
+            -e SQS_QUEUE_URL=${SQSQueueURL} \
+            -e COGNITO_USER_POOL_ID=${CognitoUserPoolId} \
+            -e COGNITO_CLIENT_ID=${CognitoClientId} \
+            ${ECRAccountId}.dkr.ecr.${ECRRegion}.amazonaws.com/video-forge-job-service:latest
+
+          ExecStop=/usr/bin/docker stop -t 30 job-service
+
+          [Install]
+          WantedBy=multi-user.target
+          EOF
+
+          # Start service
+          systemctl daemon-reload
+          systemctl enable job-service
+          systemctl start job-service
+
+          echo "========================================="
+          echo "Job Service Installation Complete"
+          echo "========================================="
+
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-job-service'
+        - Key: Environment
+          Value: production
+        - Key: Service
+          Value: job-service
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  # ============================================
+  # Client EC2 Instance
+  # ============================================
+  ClientInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      ImageId: !FindInMap [RegionMap, !Ref 'AWS::Region', AMI]
+      KeyName: !Ref KeyPairName
+      IamInstanceProfile: !Ref IAMInstanceProfile
+      SecurityGroupIds:
+        - !Ref SecurityGroupId
+      SubnetId: !Ref PublicSubnetId
+      Monitoring: true
+
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -e
+
+          # Log everything
+          exec > >(tee /var/log/user-data.log)
+          exec 2>&1
+
+          echo "========================================="
+          echo "Client Installation Started"
+          echo "========================================="
+
+          # Update system
+          apt-get update -y
+          apt-get upgrade -y
+
+          # Install Docker
+          apt-get install -y docker.io
+          systemctl start docker
+          systemctl enable docker
+          usermod -a -G docker ubuntu
+
+          # Install AWS CLI v2
+          apt-get install -y unzip
+          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+          unzip -q awscliv2.zip
+          ./aws/install
+          rm -rf aws awscliv2.zip
+
+          # Login to ECR
+          aws ecr get-login-password --region ${ECRRegion} | docker login --username AWS --password-stdin ${ECRAccountId}.dkr.ecr.${ECRRegion}.amazonaws.com
+
+          # Pull Client container
+          docker pull ${ECRAccountId}.dkr.ecr.${ECRRegion}.amazonaws.com/video-forge-client:latest
+
+          # Create systemd service
+          cat > /etc/systemd/system/client.service <<'EOF'
+          [Unit]
+          Description=VideoForge Client
+          After=docker.service
+          Requires=docker.service
+
+          [Service]
+          Type=simple
+          Restart=always
+          RestartSec=10
+          TimeoutStartSec=300
+
+          ExecStartPre=-/usr/bin/docker stop client
+          ExecStartPre=-/usr/bin/docker rm client
+
+          ExecStart=/usr/bin/docker run --name client \
+            --rm \
+            -p 3000:80 \
+            -e REACT_APP_API_BASE_URL=${ApiGatewayURL} \
+            ${ECRAccountId}.dkr.ecr.${ECRRegion}.amazonaws.com/video-forge-client:latest
+
+          ExecStop=/usr/bin/docker stop -t 30 client
+
+          [Install]
+          WantedBy=multi-user.target
+          EOF
+
+          # Start service
+          systemctl daemon-reload
+          systemctl enable client
+          systemctl start client
+
+          echo "========================================="
+          echo "Client Installation Complete"
+          echo "========================================="
+
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-client'
+        - Key: Environment
+          Value: production
+        - Key: Service
+          Value: client
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  # ============================================
+  # CloudWatch Alarms
+  # ============================================
+  JobServiceStatusCheckAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${EnvironmentName}-job-service-status-check'
+      AlarmDescription: Alert when Job Service instance status check fails
+      MetricName: StatusCheckFailed
+      Namespace: AWS/EC2
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 2
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: InstanceId
+          Value: !Ref JobServiceInstance
+
+  ClientStatusCheckAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${EnvironmentName}-client-status-check'
+      AlarmDescription: Alert when Client instance status check fails
+      MetricName: StatusCheckFailed
+      Namespace: AWS/EC2
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 2
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: InstanceId
+          Value: !Ref ClientInstance
+
+Outputs:
+  JobServiceInstanceId:
+    Description: Job Service EC2 Instance ID
+    Value: !Ref JobServiceInstance
+    Export:
+      Name: !Sub '${EnvironmentName}-job-service-instance-id'
+
+  JobServicePublicDNS:
+    Description: Job Service Public DNS
+    Value: !GetAtt JobServiceInstance.PublicDnsName
+    Export:
+      Name: !Sub '${EnvironmentName}-job-service-dns'
+
+  JobServicePublicIP:
+    Description: Job Service Public IP
+    Value: !GetAtt JobServiceInstance.PublicIp
+    Export:
+      Name: !Sub '${EnvironmentName}-job-service-ip'
+
+  JobServiceURL:
+    Description: Job Service URL
+    Value: !Sub 'http://${JobServiceInstance.PublicDnsName}:8080'
+    Export:
+      Name: !Sub '${EnvironmentName}-job-service-url'
+
+  ClientInstanceId:
+    Description: Client EC2 Instance ID
+    Value: !Ref ClientInstance
+    Export:
+      Name: !Sub '${EnvironmentName}-client-instance-id'
+
+  ClientPublicDNS:
+    Description: Client Public DNS
+    Value: !GetAtt ClientInstance.PublicDnsName
+    Export:
+      Name: !Sub '${EnvironmentName}-client-dns'
+
+  ClientPublicIP:
+    Description: Client Public IP
+    Value: !GetAtt ClientInstance.PublicIp
+    Export:
+      Name: !Sub '${EnvironmentName}-client-ip'
+
+  ClientURL:
+    Description: Client URL (use CloudFront in production)
+    Value: !Sub 'http://${ClientInstance.PublicDnsName}:3000'
+    Export:
+      Name: !Sub '${EnvironmentName}-client-url'

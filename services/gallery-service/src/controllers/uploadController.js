@@ -81,7 +81,10 @@ class UploadController {
         resolution: metadata.resolution || null,
         video_codec: metadata.videoCodec || null,
         audio_codec: metadata.audioCodec || null,
-        file_size: metadata.fileSize || null
+        file_size: metadata.fileSize || null,
+        // Explicitly set timestamps
+        created_at: new Date(),
+        updated_at: new Date()
       });
 
       logger.info('Video upload confirmed', { videoId: video.id, userId });

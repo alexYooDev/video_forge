@@ -1,0 +1,76 @@
+{
+  "family": "video-forge-auth-service",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "256",
+  "memory": "512",
+  "executionRoleArn": "arn:aws:iam::901444280953:role/Execution-Role-CAB432-ECS",
+  "taskRoleArn": "arn:aws:iam::901444280953:role/Task-Role-CAB432-ECS",
+  "containerDefinitions": [
+    {
+      "name": "auth-service",
+      "image": "901444280953.dkr.ecr.ap-southeast-2.amazonaws.com/video-forge-auth-service:latest",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 5000,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        {
+          "name": "PORT",
+          "value": "5000"
+        },
+        {
+          "name": "NODE_ENV",
+          "value": "production"
+        },
+        {
+          "name": "AWS_REGION",
+          "value": "ap-southeast-2"
+        },
+        {
+          "name": "COGNITO_USER_POOL_ID",
+          "value": "ap-southeast-2_jft50FBre"
+        },
+        {
+          "name": "COGNITO_CLIENT_ID",
+          "value": "59ff9f0j33qp7al3vje4j4isc0"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "JWT_SECRET",
+          "valueFrom": "arn:aws:secretsmanager:ap-southeast-2:901444280953:secret:/video-forge/auth/jwt-secret-PYQwpg:JWT_SECRET::"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/video-forge-auth-service",
+          "awslogs-region": "ap-southeast-2",
+          "awslogs-stream-prefix": "ecs",
+          "awslogs-create-group": "true"
+        }
+      },
+      "healthCheck": {
+        "command": ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:5000/health || exit 1"],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 10
+      }
+    }
+  ],
+  "tags": [
+    {
+      "key": "qut-username",
+      "value": "n12159069@qut.edu.au"
+    },
+    {
+      "key": "purpose",
+      "value": "assessment-3"
+    }
+  ]
+}

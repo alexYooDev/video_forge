@@ -4,22 +4,19 @@ const jobController = require('../controllers/jobController');
 
 const router = express.Router();
 
-// Public routes with optional auth (for viewing public videos)
-router.get('/:id/stream', optionalAuth, jobController.streamVideo);
-router.get('/:id', optionalAuth, jobController.getJobById);
+// ===== IMPORTANT: Route Order Matters! =====
+// Specific routes MUST come before generic /:id routes
+// Otherwise /:id will catch "/stats" and treat it as a job ID
 
-// All other routes require authentication
-router.use(authenticate);
+// Authenticated routes with specific paths (defined BEFORE /:id)
+router.get('/', authenticate, jobController.getAllJobs);
+router.post('/', authenticate, jobController.createJob);
+router.get('/stats', authenticate, jobController.getUserStats);
+router.get('/process-stats', authenticate, jobController.getProcessingStatus);
+router.get('/events', authenticate, jobController.getJobEvents);
+router.post('/load-test', authenticate, jobController.runLoadTest);
 
-router.get('/', jobController.getAllJobs);
-router.post('/', jobController.createJob);
-router.get('/stats', jobController.getUserStats);
-router.get('/process-stats', jobController.getProcessingStatus);
-router.get('/events', jobController.getJobEvents);
-// load testing purpose
-router.post('/load-test', jobController.runLoadTest);
-
-// Admin routes
+// Admin routes (specific paths)
 router.get('/admin/stats', requireAuth('admin'), jobController.getAdminJobStats);
 router.get('/admin/all', requireAuth('admin'), jobController.getAllJobsAdmin);
 router.get('/admin/processing-status', requireAuth('admin'), jobController.getProcessingStatus);
@@ -28,10 +25,13 @@ router.post('/admin/restart-failed', requireAuth('admin'), jobController.restart
 router.delete('/admin/cleanup-old', requireAuth('admin'), jobController.cleanupOldJobs);
 router.delete('/admin/:id', requireAuth('admin'), jobController.deleteJobAdmin);
 
-// video processing (authenticated)
-router.put('/:id', jobController.updateJob);
-router.delete('/:id', jobController.deleteJob);
-router.get('/:id/assets', jobController.getJobAssets);
-router.get('/:id/assets/:assetId/download', jobController.downloadAsset.bind(jobController));
+// Generic /:id routes MUST come LAST (they match anything)
+// These use optionalAuth for public video viewing
+router.get('/:id/stream', optionalAuth, jobController.streamVideo);
+router.get('/:id/assets', authenticate, jobController.getJobAssets);
+router.get('/:id/assets/:assetId/download', authenticate, jobController.downloadAsset.bind(jobController));
+router.get('/:id', optionalAuth, jobController.getJobById);
+router.put('/:id', authenticate, jobController.updateJob);
+router.delete('/:id', authenticate, jobController.deleteJob);
 
 module.exports = router;

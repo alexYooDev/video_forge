@@ -67,7 +67,6 @@ const VideoPlayer = ({ jobId }) => {
         {/* Video Info Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-lg font-medium text-black">Video Player</h3>
             {videoInfo && (
               <p className="text-sm font-semibold text-black">
                 {videoInfo.resolution} • {formatDuration(videoInfo.duration)}

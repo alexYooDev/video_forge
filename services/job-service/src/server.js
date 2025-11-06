@@ -10,6 +10,7 @@ const App = require('./config/app');
 const { initDatabase } = require('./models/index');
 const jobService = require('./services/jobService');
 const cacheService = require('./services/cacheService');
+const cognitoService = require('./services/cognitoService');
 
 async function startServer () {
     try {
@@ -36,6 +37,10 @@ async function startServer () {
         apiLogger.system('Updating service configurations with AWS values');
         jobService.updateConfig();
         cacheService.updateConfig();
+
+        // Initialize Cognito service for token verification
+        apiLogger.system('Initializing Cognito service');
+        await cognitoService.initialize();
 
         // Initialize cache service
         apiLogger.system('Initializing cache service');

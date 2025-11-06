@@ -1,0 +1,105 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'VideoForge - SQS Queues with Dead Letter Queue for video processing'
+
+Parameters:
+  EnvironmentName:
+    Description: Environment name prefix
+    Type: String
+    Default: video-forge
+
+  MaxReceiveCount:
+    Description: Maximum number of receives before sending to DLQ
+    Type: Number
+    Default: 3
+    MinValue: 1
+    MaxValue: 10
+
+  MessageRetentionPeriod:
+    Description: Message retention period in seconds (4 days)
+    Type: Number
+    Default: 345600
+    MinValue: 60
+    MaxValue: 1209600
+
+Resources:
+  # Dead Letter Queue - receives failed messages
+  VideoProcessingDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub '${EnvironmentName}-video-processing-queue-dlq'
+      MessageRetentionPeriod: !Ref MessageRetentionPeriod
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-dlq'
+        - Key: Environment
+          Value: production
+        - Key: Purpose
+          Value: Dead letter queue for failed video processing jobs
+
+  # Main Processing Queue
+  VideoProcessingQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub '${EnvironmentName}-video-processing-queue'
+      VisibilityTimeout: 900  # 15 minutes - enough time for video transcoding
+      MessageRetentionPeriod: !Ref MessageRetentionPeriod
+      ReceiveMessageWaitTimeSeconds: 20  # Long polling
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt VideoProcessingDeadLetterQueue.Arn
+        maxReceiveCount: !Ref MaxReceiveCount
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-processing-queue'
+        - Key: Environment
+          Value: production
+        - Key: Purpose
+          Value: Video transcoding job queue
+
+  # CloudWatch Alarm for DLQ messages
+  DLQAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${EnvironmentName}-dlq-messages-alarm'
+      AlarmDescription: Alert when messages appear in DLQ
+      MetricName: ApproximateNumberOfMessagesVisible
+      Namespace: AWS/SQS
+      Statistic: Sum
+      Period: 300  # 5 minutes
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt VideoProcessingDeadLetterQueue.QueueName
+      TreatMissingData: notBreaching
+
+Outputs:
+  VideoProcessingQueueURL:
+    Description: URL of the main video processing queue
+    Value: !Ref VideoProcessingQueue
+    Export:
+      Name: !Sub '${EnvironmentName}-processing-queue-url'
+
+  VideoProcessingQueueArn:
+    Description: ARN of the main video processing queue
+    Value: !GetAtt VideoProcessingQueue.Arn
+    Export:
+      Name: !Sub '${EnvironmentName}-processing-queue-arn'
+
+  VideoProcessingQueueName:
+    Description: Name of the main video processing queue
+    Value: !GetAtt VideoProcessingQueue.QueueName
+    Export:
+      Name: !Sub '${EnvironmentName}-processing-queue-name'
+
+  DeadLetterQueueURL:
+    Description: URL of the dead letter queue
+    Value: !Ref VideoProcessingDeadLetterQueue
+    Export:
+      Name: !Sub '${EnvironmentName}-dlq-url'
+
+  DeadLetterQueueArn:
+    Description: ARN of the dead letter queue
+    Value: !GetAtt VideoProcessingDeadLetterQueue.Arn
+    Export:
+      Name: !Sub '${EnvironmentName}-dlq-arn'

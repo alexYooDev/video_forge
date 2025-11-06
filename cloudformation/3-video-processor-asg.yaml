@@ -1,0 +1,407 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'VideoForge - Video Processor Auto Scaling Group with SQS-based scaling'
+
+Parameters:
+  EnvironmentName:
+    Description: Environment name prefix
+    Type: String
+    Default: video-forge
+
+  InstanceType:
+    Description: EC2 instance type for video processors
+    Type: String
+    Default: t2.micro
+    AllowedValues:
+      - t2.micro
+      - t2.small
+      - t2.medium
+      - t3.micro
+      - t3.small
+      - t3.medium
+
+  KeyPairName:
+    Description: EC2 Key Pair for SSH access
+    Type: AWS::EC2::KeyPair::KeyName
+
+  VpcId:
+    Description: VPC ID for the Auto Scaling Group
+    Type: AWS::EC2::VPC::Id
+
+  SubnetIds:
+    Description: List of subnet IDs for the Auto Scaling Group
+    Type: List<AWS::EC2::Subnet::Id>
+
+  SecurityGroupId:
+    Description: Security group ID for video processor instances
+    Type: AWS::EC2::SecurityGroup::Id
+
+  IAMInstanceProfile:
+    Description: IAM Instance Profile for EC2 instances (CAB432-EC2-Role)
+    Type: String
+
+  MinSize:
+    Description: Minimum number of instances
+    Type: Number
+    Default: 1
+    MinValue: 0
+    MaxValue: 10
+
+  MaxSize:
+    Description: Maximum number of instances
+    Type: Number
+    Default: 3
+    MinValue: 1
+    MaxValue: 20
+
+  DesiredCapacity:
+    Description: Desired number of instances
+    Type: Number
+    Default: 1
+    MinValue: 0
+    MaxValue: 10
+
+  SQSQueueName:
+    Description: Name of the SQS queue for target tracking
+    Type: String
+    Default: video-forge-video-processing-queue
+
+  TargetMessagesPerInstance:
+    Description: Target number of messages per instance for scaling
+    Type: Number
+    Default: 5
+    MinValue: 1
+    MaxValue: 100
+
+  DBHost:
+    Description: RDS database host
+    Type: String
+
+  DBPort:
+    Description: RDS database port
+    Type: String
+    Default: '5432'
+
+  DBName:
+    Description: RDS database name
+    Type: String
+    Default: cohort_2025
+
+  DBUser:
+    Description: RDS database username
+    Type: String
+
+  DBSecretArn:
+    Description: ARN of database credentials secret in Secrets Manager
+    Type: String
+
+  S3BucketName:
+    Description: S3 bucket name for video storage
+    Type: String
+    Default: video-forge-storage
+
+  SQSQueueURL:
+    Description: SQS queue URL for video processing
+    Type: String
+
+  ECRImageURI:
+    Description: ECR image URI for video processor
+    Type: String
+    Default: 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com/video-forge-video-processor:latest
+
+  MaxConcurrentJobs:
+    Description: |
+      Maximum number of concurrent video processing jobs per instance.
+      This value should match or be less than the database connection pool max
+      to prevent database connection exhaustion. Current pool max is 2 per instance.
+    Type: Number
+    Default: 2
+    MinValue: 1
+    MaxValue: 5
+
+  SQSPollingInterval:
+    Description: SQS polling interval in milliseconds
+    Type: Number
+    Default: 5000
+    MinValue: 1000
+    MaxValue: 30000
+
+Mappings:
+  # Ubuntu 24.04 LTS AMI IDs by region
+  RegionMap:
+    ap-southeast-2:
+      AMI: ami-001f2488b35ca8aad  # Ubuntu 24.04 LTS
+
+Resources:
+  # Launch Template for Video Processor instances
+  VideoProcessorLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: !Sub '${EnvironmentName}-video-processor-lt'
+      LaunchTemplateData:
+        ImageId: !FindInMap [RegionMap, !Ref 'AWS::Region', AMI]
+        InstanceType: !Ref InstanceType
+        KeyName: !Ref KeyPairName
+        IamInstanceProfile:
+          Name: !Ref IAMInstanceProfile
+        SecurityGroupIds:
+          - !Ref SecurityGroupId
+        Monitoring:
+          Enabled: true
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: !Sub '${EnvironmentName}-video-processor'
+              - Key: Environment
+                Value: production
+              - Key: Service
+                Value: video-processor
+              - Key: ManagedBy
+                Value: CloudFormation
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            # EC2 User Data script for Video Processor - VideoForge
+            # Ubuntu 24.04 compatible
+            # Auto-scaling compatible
+
+            set -e
+
+            # Log everything to a file for debugging
+            exec > >(tee /var/log/user-data.log)
+            exec 2>&1
+
+            echo "================================================"
+            echo "VideoForge Video Processor Installation (Ubuntu)"
+            echo "Started at: $(date)"
+            echo "Instance Type: $(ec2-metadata --instance-type | cut -d ' ' -f 2)"
+            echo "Instance ID: $(ec2-metadata --instance-id | cut -d ' ' -f 2)"
+            echo "================================================"
+
+            # Update system
+            echo "[1/8] Updating system packages..."
+            apt-get update -y
+
+            # Install Docker
+            echo "[2/8] Installing Docker..."
+            apt-get install -y docker.io
+            systemctl start docker
+            systemctl enable docker
+            usermod -a -G docker ubuntu
+
+            # Install Docker Compose
+            echo "[3/8] Installing Docker Compose..."
+            curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+            chmod +x /usr/local/bin/docker-compose
+
+            # Install AWS CLI v2
+            echo "[4/8] Installing AWS CLI v2..."
+            if ! command -v aws &> /dev/null; then
+                apt-get install -y unzip
+                curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+                unzip -q awscliv2.zip
+                ./aws/install
+                rm -rf aws awscliv2.zip
+            fi
+
+            # Login to ECR
+            echo "[5/8] Logging into ECR..."
+            aws ecr get-login-password --region ${AWS::Region} | docker login --username AWS --password-stdin 901444280953.dkr.ecr.${AWS::Region}.amazonaws.com
+
+            # Pull Video Processor container
+            echo "[6/8] Pulling video-processor Docker image..."
+            docker pull ${ECRImageURI}
+
+            # Create CloudWatch Logs group
+            echo "[7/8] Creating CloudWatch Logs group..."
+            aws logs create-log-group --log-group-name /ec2/${EnvironmentName}-video-processor --region ${AWS::Region} 2>/dev/null || echo "Log group already exists"
+
+            # Install CloudWatch Logs agent
+            echo "[7.5/8] Installing CloudWatch Logs plugin..."
+            apt-get install -y amazon-cloudwatch-agent || true
+
+            # Create systemd service for video processor
+            echo "[8/8] Creating systemd service..."
+            # Note: MAX_CONCURRENT_JOBS should match database connection pool max (2)
+            # to prevent "too many connections" errors on QUT database
+            cat > /etc/systemd/system/video-processor.service <<'EOF'
+            [Unit]
+            Description=VideoForge Video Processor
+            After=docker.service
+            Requires=docker.service
+
+            [Service]
+            Type=simple
+            Restart=always
+            RestartSec=10
+            TimeoutStartSec=300
+            TimeoutStopSec=30
+
+            # Clean up any existing container
+            ExecStartPre=-/usr/bin/docker stop video-processor
+            ExecStartPre=-/usr/bin/docker rm video-processor
+
+            # Run the video processor container
+            ExecStart=/usr/bin/docker run --name video-processor \
+              --rm \
+              -e NODE_ENV=production \
+              -e AWS_REGION=${AWS::Region} \
+              -e DB_HOST=${DBHost} \
+              -e DB_PORT=${DBPort} \
+              -e DB_NAME=${DBName} \
+              -e DB_USER=${DBUser} \
+              -e DB_SECRET_ARN=${DBSecretArn} \
+              -e S3_BUCKET_NAME=${S3BucketName} \
+              -e SQS_QUEUE_URL=${SQSQueueURL} \
+              -e MAX_CONCURRENT_JOBS=${MaxConcurrentJobs} \
+              -e SQS_POLLING_INTERVAL=${SQSPollingInterval} \
+              -e SQS_QUEUE_NAME=${SQSQueueName} \
+              ${ECRImageURI}
+
+            # Stop container gracefully
+            ExecStop=/usr/bin/docker stop -t 30 video-processor
+
+            [Install]
+            WantedBy=multi-user.target
+            EOF
+
+            # Enable and start the service
+            echo "Starting video-processor service..."
+            systemctl daemon-reload
+            systemctl enable video-processor
+            systemctl start video-processor
+
+            # Wait and check status
+            sleep 5
+            systemctl status video-processor --no-pager || true
+
+            echo "================================================"
+            echo "Video Processor installation complete!"
+            echo "Service status:"
+            systemctl is-active video-processor || echo "Service not active yet"
+            docker ps | grep video-processor || echo "Container not running yet"
+            echo "================================================"
+
+  # Auto Scaling Group
+  VideoProcessorAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: !Sub '${EnvironmentName}-video-processor-asg'
+      LaunchTemplate:
+        LaunchTemplateId: !Ref VideoProcessorLaunchTemplate
+        Version: !GetAtt VideoProcessorLaunchTemplate.LatestVersionNumber
+      MinSize: !Ref MinSize
+      MaxSize: !Ref MaxSize
+      DesiredCapacity: !Ref DesiredCapacity
+      VPCZoneIdentifier: !Ref SubnetIds
+      HealthCheckType: EC2
+      HealthCheckGracePeriod: 300
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-video-processor-asg'
+          PropagateAtLaunch: true
+        - Key: Environment
+          Value: production
+          PropagateAtLaunch: true
+        - Key: ManagedBy
+          Value: CloudFormation
+          PropagateAtLaunch: true
+
+  # Target Tracking Scaling Policy based on SQS Queue Depth
+  SQSTargetTrackingScalingPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AutoScalingGroupName: !Ref VideoProcessorAutoScalingGroup
+      PolicyType: TargetTrackingScaling
+      TargetTrackingConfiguration:
+        CustomizedMetricSpecification:
+          Metrics:
+            - Id: m1
+              MetricStat:
+                Metric:
+                  Namespace: AWS/SQS
+                  MetricName: ApproximateNumberOfMessagesVisible
+                  Dimensions:
+                    - Name: QueueName
+                      Value: !Ref SQSQueueName
+                Stat: Average
+                Unit: None
+              ReturnData: false
+            - Id: m2
+              MetricStat:
+                Metric:
+                  Namespace: AWS/AutoScaling
+                  MetricName: GroupDesiredCapacity
+                  Dimensions:
+                    - Name: AutoScalingGroupName
+                      Value: !Ref VideoProcessorAutoScalingGroup
+                Stat: Average
+                Unit: None
+              ReturnData: false
+            - Id: e1
+              Expression: m1 / m2
+              ReturnData: true
+        TargetValue: !Ref TargetMessagesPerInstance
+        ScaleInCooldown: 300   # 5 minutes cooldown before scaling in
+        ScaleOutCooldown: 60   # 1 minute cooldown before scaling out
+
+  # CloudWatch Alarm for High Queue Depth
+  HighQueueDepthAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${EnvironmentName}-high-queue-depth'
+      AlarmDescription: Alert when SQS queue depth is too high
+      MetricName: ApproximateNumberOfMessagesVisible
+      Namespace: AWS/SQS
+      Statistic: Average
+      Period: 300  # 5 minutes
+      EvaluationPeriods: 2
+      Threshold: 20
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: QueueName
+          Value: !Ref SQSQueueName
+      TreatMissingData: notBreaching
+
+  # CloudWatch Alarm for No Running Instances
+  NoInstancesAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${EnvironmentName}-no-instances-running'
+      AlarmDescription: Alert when no video processor instances are running
+      MetricName: GroupDesiredCapacity
+      Namespace: AWS/AutoScaling
+      Statistic: Average
+      Period: 300  # 5 minutes
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: LessThanThreshold
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value: !Ref VideoProcessorAutoScalingGroup
+      TreatMissingData: breaching
+
+Outputs:
+  AutoScalingGroupName:
+    Description: Name of the Auto Scaling Group
+    Value: !Ref VideoProcessorAutoScalingGroup
+    Export:
+      Name: !Sub '${EnvironmentName}-asg-name'
+
+  LaunchTemplateName:
+    Description: Name of the Launch Template
+    Value: !Ref VideoProcessorLaunchTemplate
+    Export:
+      Name: !Sub '${EnvironmentName}-launch-template-name'
+
+  LaunchTemplateId:
+    Description: ID of the Launch Template
+    Value: !Ref VideoProcessorLaunchTemplate
+    Export:
+      Name: !Sub '${EnvironmentName}-launch-template-id'
+
+  ScalingPolicyArn:
+    Description: ARN of the Target Tracking Scaling Policy
+    Value: !Ref SQSTargetTrackingScalingPolicy
+    Export:
+      Name: !Sub '${EnvironmentName}-scaling-policy-arn'

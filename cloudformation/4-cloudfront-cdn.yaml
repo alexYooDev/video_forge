@@ -1,0 +1,213 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'VideoForge - CloudFront CDN for global video content delivery'
+
+Parameters:
+  EnvironmentName:
+    Description: Environment name prefix
+    Type: String
+    Default: video-forge
+
+  S3BucketName:
+    Description: S3 bucket name for origin
+    Type: String
+    Default: video-forge-storage
+
+  S3BucketDomainName:
+    Description: S3 bucket regional domain name
+    Type: String
+    Default: video-forge-storage.s3.ap-southeast-2.amazonaws.com
+
+  PriceClass:
+    Description: CloudFront price class
+    Type: String
+    Default: PriceClass_All
+    AllowedValues:
+      - PriceClass_100  # US, Canada, Europe
+      - PriceClass_200  # US, Canada, Europe, Asia, Middle East, Africa
+      - PriceClass_All  # All edge locations (best performance)
+
+Resources:
+  # Origin Access Control for S3
+  CloudFrontOriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub '${EnvironmentName}-oac'
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  # CloudFront Distribution
+  CloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Comment: !Sub 'VideoForge CDN for ${EnvironmentName}'
+        Enabled: true
+        HttpVersion: http2and3
+        PriceClass: !Ref PriceClass
+
+        # Origins
+        Origins:
+          - Id: S3Origin
+            DomainName: !Ref S3BucketDomainName
+            OriginAccessControlId: !Ref CloudFrontOriginAccessControl
+            S3OriginConfig: {}
+            ConnectionAttempts: 3
+            ConnectionTimeout: 10
+
+        # Default Cache Behavior
+        DefaultCacheBehavior:
+          TargetOriginId: S3Origin
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+          CachedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+          Compress: true
+
+          # Cache Policy
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6  # Managed-CachingOptimized
+
+          # Origin Request Policy
+          OriginRequestPolicyId: 88a5eaf4-2fd4-4709-b370-b4c650ea3fcf  # Managed-CORS-S3Origin
+
+        # Cache Behaviors for different content types
+        CacheBehaviors:
+          # Videos - longer cache, larger objects
+          - PathPattern: 'videos/*'
+            TargetOriginId: S3Origin
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods:
+              - GET
+              - HEAD
+              - OPTIONS
+            CachedMethods:
+              - GET
+              - HEAD
+              - OPTIONS
+            Compress: false  # Videos are already compressed
+            CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6  # Managed-CachingOptimized
+            OriginRequestPolicyId: 88a5eaf4-2fd4-4709-b370-b4c650ea3fcf  # Managed-CORS-S3Origin
+
+          # Processed videos - long cache
+          - PathPattern: 'videos/processed/*'
+            TargetOriginId: S3Origin
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods:
+              - GET
+              - HEAD
+            CachedMethods:
+              - GET
+              - HEAD
+            Compress: false
+            CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6  # Managed-CachingOptimized
+            OriginRequestPolicyId: 88a5eaf4-2fd4-4709-b370-b4c650ea3fcf  # Managed-CORS-S3Origin
+
+        # Custom Error Responses
+        CustomErrorResponses:
+          - ErrorCode: 403
+            ResponseCode: 404
+            ResponsePagePath: /404.html
+            ErrorCachingMinTTL: 300
+          - ErrorCode: 404
+            ResponseCode: 404
+            ResponsePagePath: /404.html
+            ErrorCachingMinTTL: 300
+
+        # Logging Configuration (optional)
+        Logging:
+          Bucket: !Sub '${S3BucketName}.s3.amazonaws.com'
+          Prefix: 'cloudfront-logs/'
+          IncludeCookies: false
+
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-cdn'
+        - Key: Environment
+          Value: production
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  # S3 Bucket Policy to allow CloudFront OAC access
+  S3BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref S3BucketName
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowCloudFrontServicePrincipal
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: 's3:GetObject'
+            Resource: !Sub 'arn:aws:s3:::${S3BucketName}/*'
+            Condition:
+              StringEquals:
+                'AWS:SourceArn': !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${CloudFrontDistribution}'
+
+  # CloudWatch Alarm for 4xx Error Rate
+  CloudFront4xxErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${EnvironmentName}-cloudfront-4xx-errors'
+      AlarmDescription: Alert when CloudFront 4xx error rate is high
+      MetricName: 4xxErrorRate
+      Namespace: AWS/CloudFront
+      Statistic: Average
+      Period: 300  # 5 minutes
+      EvaluationPeriods: 2
+      Threshold: 5  # 5% error rate
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: DistributionId
+          Value: !Ref CloudFrontDistribution
+      TreatMissingData: notBreaching
+
+  # CloudWatch Alarm for 5xx Error Rate
+  CloudFront5xxErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${EnvironmentName}-cloudfront-5xx-errors'
+      AlarmDescription: Alert when CloudFront 5xx error rate is high
+      MetricName: 5xxErrorRate
+      Namespace: AWS/CloudFront
+      Statistic: Average
+      Period: 300  # 5 minutes
+      EvaluationPeriods: 2
+      Threshold: 1  # 1% error rate
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: DistributionId
+          Value: !Ref CloudFrontDistribution
+      TreatMissingData: notBreaching
+
+Outputs:
+  DistributionId:
+    Description: CloudFront Distribution ID
+    Value: !Ref CloudFrontDistribution
+    Export:
+      Name: !Sub '${EnvironmentName}-cloudfront-id'
+
+  DistributionDomainName:
+    Description: CloudFront Distribution Domain Name
+    Value: !GetAtt CloudFrontDistribution.DomainName
+    Export:
+      Name: !Sub '${EnvironmentName}-cloudfront-domain'
+
+  DistributionURL:
+    Description: CloudFront Distribution URL
+    Value: !Sub 'https://${CloudFrontDistribution.DomainName}'
+    Export:
+      Name: !Sub '${EnvironmentName}-cloudfront-url'
+
+  OriginAccessControlId:
+    Description: Origin Access Control ID
+    Value: !Ref CloudFrontOriginAccessControl
+    Export:
+      Name: !Sub '${EnvironmentName}-oac-id'

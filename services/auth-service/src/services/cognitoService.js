@@ -370,6 +370,60 @@ class CognitoService {
     }
   }
 
+  async refreshToken(refreshToken) {
+    await this.ensureInitialized();
+    try {
+      const params = {
+        AuthFlow: 'REFRESH_TOKEN_AUTH',
+        ClientId: this.clientId,
+        AuthParameters: {
+          REFRESH_TOKEN: refreshToken
+        }
+      };
+
+      // Add SECRET_HASH if client secret is configured
+      if (this.clientSecret) {
+        // For refresh token, we need to extract username from the refresh token
+        // But Cognito doesn't require USERNAME for REFRESH_TOKEN_AUTH with SECRET_HASH
+        // So we only add SECRET_HASH without USERNAME
+        const secretHash = this.calculateSecretHash(this.clientId);
+        if (secretHash) {
+          params.AuthParameters.SECRET_HASH = secretHash;
+        }
+      }
+
+      const command = new InitiateAuthCommand(params);
+      const response = await this.cognitoClient.send(command);
+
+      const idToken = response.AuthenticationResult.IdToken;
+      const accessToken = response.AuthenticationResult.AccessToken;
+
+      // Verify the new ID token to get user info
+      const userInfo = await this.verifyTokenWithPermissions(idToken);
+
+      return {
+        user: {
+          id: userInfo.id,
+          email: userInfo.email,
+          username: userInfo.username,
+          role: userInfo.role,
+          groups: userInfo.groups,
+          permissions: userInfo.permissions
+        },
+        tokens: {
+          idToken,
+          accessToken,
+          refreshToken // Return the same refresh token as it doesn't change
+        }
+      };
+    } catch (error) {
+      if (error.name === 'NotAuthorizedException') {
+        throw UnauthorizedError('Invalid or expired refresh token');
+      }
+      throw UnauthorizedError(error.message);
+    }
+  }
+
   async adminCreateUser(email, temporaryPassword, role = 'user') {
     await this.ensureInitialized();
     try {
@@ -785,14 +839,7 @@ class CognitoService {
         permissions: groupInfo.permissions
       };
     } catch (error) {
-      console.error('Token verification failed:', {
-        errorName: error.name,
-        errorMessage: error.message,
-        initialized: this.initialized,
-        hasUserPoolId: !!this.userPoolId,
-        hasClientId: !!this.clientId
-      });
-      throw UnauthorizedError(`Token verification failed: ${error.message}`);
+      throw UnauthorizedError('Token verification failed');
     }
   }
 

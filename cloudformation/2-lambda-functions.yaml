@@ -1,0 +1,235 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'VideoForge - Lambda Functions (Gallery and Streaming Services)'
+
+Parameters:
+  EnvironmentName:
+    Description: Environment name prefix
+    Type: String
+    Default: video-forge
+
+  VpcId:
+    Description: VPC ID for Lambda functions
+    Type: AWS::EC2::VPC::Id
+
+  PrivateSubnetIds:
+    Description: Comma-separated list of private subnet IDs
+    Type: List<AWS::EC2::Subnet::Id>
+
+  LambdaSecurityGroupId:
+    Description: Security group ID for Lambda functions
+    Type: AWS::EC2::SecurityGroup::Id
+
+  DBHost:
+    Description: RDS database host
+    Type: String
+
+  DBPort:
+    Description: RDS database port
+    Type: String
+    Default: '5432'
+
+  DBName:
+    Description: RDS database name
+    Type: String
+    Default: cohort_2025
+
+  DBUser:
+    Description: RDS database username
+    Type: String
+    Default: s458
+
+  DBSecretArn:
+    Description: ARN of database credentials secret in Secrets Manager
+    Type: String
+
+  S3BucketName:
+    Description: S3 bucket name for video storage
+    Type: String
+    Default: video-forge-storage
+
+  CognitoUserPoolId:
+    Description: Cognito User Pool ID
+    Type: String
+
+  CognitoClientId:
+    Description: Cognito Client ID
+    Type: String
+
+  JWTSecretArn:
+    Description: ARN of JWT secret in Secrets Manager
+    Type: String
+
+  LambdaRoleArn:
+    Description: ARN of the Lambda execution role (CAB432-Lambda-Role)
+    Type: String
+
+Resources:
+  # Gallery Service Lambda Function
+  GalleryServiceFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${EnvironmentName}-gallery-service'
+      Runtime: nodejs22.x
+      Handler: lambda-handler.handler
+      Role: !Ref LambdaRoleArn
+      Timeout: 60
+      MemorySize: 512
+      Code:
+        S3Bucket: !Ref S3BucketName
+        S3Key: lambda-deployments/gallery-service.zip
+      Environment:
+        Variables:
+          NODE_ENV: production
+          PORT: '5000'
+          DB_HOST: !Ref DBHost
+          DB_PORT: !Ref DBPort
+          DB_NAME: !Ref DBName
+          DB_USER: !Ref DBUser
+          DB_PASSWORD: !Sub '{{resolve:secretsmanager:${DBSecretArn}:SecretString:password}}'
+          S3_BUCKET_NAME: !Ref S3BucketName
+          COGNITO_USER_POOL_ID: !Ref CognitoUserPoolId
+          COGNITO_CLIENT_ID: !Ref CognitoClientId
+          JWT_SECRET_ARN: !Ref JWTSecretArn
+          FORCE_RELOAD: 'true'
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref LambdaSecurityGroupId
+        SubnetIds: !Ref PrivateSubnetIds
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-gallery-service'
+        - Key: Environment
+          Value: production
+        - Key: Service
+          Value: gallery
+
+  # Gallery Service Function URL
+  GalleryServiceFunctionUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      TargetFunctionArn: !GetAtt GalleryServiceFunction.Arn
+      AuthType: NONE
+      Cors:
+        AllowOrigins:
+          - '*'
+        AllowMethods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+          - OPTIONS
+        AllowHeaders:
+          - '*'
+        MaxAge: 300
+
+  # Permission for Function URL to invoke Gallery Service
+  GalleryServiceFunctionUrlPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref GalleryServiceFunction
+      Action: lambda:InvokeFunctionUrl
+      Principal: '*'
+      FunctionUrlAuthType: NONE
+
+  # Streaming Service Lambda Function
+  StreamingServiceFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${EnvironmentName}-streaming-service'
+      Runtime: nodejs22.x
+      Handler: lambda-handler.handler
+      Role: !Ref LambdaRoleArn
+      Timeout: 30
+      MemorySize: 512
+      Code:
+        S3Bucket: !Ref S3BucketName
+        S3Key: lambda-deployments/streaming-service.zip
+      Environment:
+        Variables:
+          NODE_ENV: production
+          PORT: '5001'
+          DB_HOST: !Ref DBHost
+          DB_PORT: !Ref DBPort
+          DB_NAME: !Ref DBName
+          DB_USER: !Ref DBUser
+          DB_PASSWORD: !Sub '{{resolve:secretsmanager:${DBSecretArn}:SecretString:password}}'
+          S3_BUCKET_NAME: !Ref S3BucketName
+          COGNITO_USER_POOL_ID: !Ref CognitoUserPoolId
+          COGNITO_CLIENT_ID: !Ref CognitoClientId
+          JWT_SECRET_ARN: !Ref JWTSecretArn
+          FORCE_RELOAD: 'true'
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref LambdaSecurityGroupId
+        SubnetIds: !Ref PrivateSubnetIds
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-streaming-service'
+        - Key: Environment
+          Value: production
+        - Key: Service
+          Value: streaming
+
+  # Streaming Service Function URL
+  StreamingServiceFunctionUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      TargetFunctionArn: !GetAtt StreamingServiceFunction.Arn
+      AuthType: NONE
+      Cors:
+        AllowOrigins:
+          - '*'
+        AllowMethods:
+          - GET
+          - POST
+          - OPTIONS
+        AllowHeaders:
+          - '*'
+        MaxAge: 300
+
+  # Permission for Function URL to invoke Streaming Service
+  StreamingServiceFunctionUrlPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref StreamingServiceFunction
+      Action: lambda:InvokeFunctionUrl
+      Principal: '*'
+      FunctionUrlAuthType: NONE
+
+  # CloudWatch Log Groups
+  GalleryServiceLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${GalleryServiceFunction}'
+      RetentionInDays: 7
+
+  StreamingServiceLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${StreamingServiceFunction}'
+      RetentionInDays: 7
+
+Outputs:
+  GalleryServiceFunctionArn:
+    Description: ARN of Gallery Service Lambda function
+    Value: !GetAtt GalleryServiceFunction.Arn
+    Export:
+      Name: !Sub '${EnvironmentName}-gallery-service-arn'
+
+  GalleryServiceFunctionUrl:
+    Description: Function URL of Gallery Service
+    Value: !GetAtt GalleryServiceFunctionUrl.FunctionUrl
+    Export:
+      Name: !Sub '${EnvironmentName}-gallery-service-url'
+
+  StreamingServiceFunctionArn:
+    Description: ARN of Streaming Service Lambda function
+    Value: !GetAtt StreamingServiceFunction.Arn
+    Export:
+      Name: !Sub '${EnvironmentName}-streaming-service-arn'
+
+  StreamingServiceFunctionUrl:
+    Description: Function URL of Streaming Service
+    Value: !GetAtt StreamingServiceFunctionUrl.FunctionUrl
+    Export:
+      Name: !Sub '${EnvironmentName}-streaming-service-url'

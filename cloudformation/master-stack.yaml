@@ -1,0 +1,346 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'VideoForge - Master Stack (Nested Stacks for A3 Infrastructure)'
+
+Parameters:
+  EnvironmentName:
+    Description: Environment name prefix
+    Type: String
+    Default: video-forge
+
+  # Networking Parameters
+  VpcId:
+    Description: VPC ID
+    Type: AWS::EC2::VPC::Id
+
+  PublicSubnetIds:
+    Description: Comma-separated list of public subnet IDs for EC2 ASG
+    Type: List<AWS::EC2::Subnet::Id>
+
+  PrivateSubnetIds:
+    Description: Comma-separated list of private subnet IDs for Lambda
+    Type: List<AWS::EC2::Subnet::Id>
+
+  # Security Groups
+  EC2SecurityGroupId:
+    Description: Security group ID for EC2 instances
+    Type: AWS::EC2::SecurityGroup::Id
+
+  LambdaSecurityGroupId:
+    Description: Security group ID for Lambda functions
+    Type: AWS::EC2::SecurityGroup::Id
+
+  # IAM
+  EC2InstanceProfile:
+    Description: IAM Instance Profile name for EC2 (CAB432-EC2-Role)
+    Type: String
+    Default: CAB432-EC2-Role
+
+  LambdaRoleArn:
+    Description: ARN of Lambda execution role (CAB432-Lambda-Role)
+    Type: String
+
+  # EC2
+  KeyPairName:
+    Description: EC2 Key Pair name
+    Type: AWS::EC2::KeyPair::KeyName
+
+  PublicSubnetId:
+    Description: Single public subnet ID for EC2 instances
+    Type: AWS::EC2::Subnet::Id
+
+  # ECS
+  ECSSecurityGroupId:
+    Description: Security group ID for ECS tasks
+    Type: AWS::EC2::SecurityGroup::Id
+
+  ECSTaskExecutionRoleArn:
+    Description: ARN of ECS Task Execution Role
+    Type: String
+
+  ECSTaskRoleArn:
+    Description: ARN of ECS Task Role
+    Type: String
+
+  StudentID:
+    Description: Student ID for naming
+    Type: String
+    Default: n12159069
+
+  # API Gateway
+  ApiGatewayURL:
+    Description: API Gateway URL for client
+    Type: String
+    Default: https://9aprzwxo9g.execute-api.ap-southeast-2.amazonaws.com/prod
+
+  # Database
+  DBHost:
+    Description: RDS database host
+    Type: String
+
+  DBSecretArn:
+    Description: ARN of database credentials secret in Secrets Manager
+    Type: String
+
+  # S3
+  S3BucketName:
+    Description: S3 bucket name
+    Type: String
+    Default: video-forge-storage
+
+  # Cognito
+  CognitoUserPoolId:
+    Description: Cognito User Pool ID
+    Type: String
+
+  CognitoClientId:
+    Description: Cognito Client ID
+    Type: String
+
+  # Secrets Manager
+  JWTSecretArn:
+    Description: ARN of JWT secret
+    Type: String
+
+  # Template URLs (S3 bucket where nested templates are stored)
+  TemplatesBucketURL:
+    Description: S3 URL prefix for nested stack templates
+    Type: String
+    Default: https://video-forge-storage.s3.ap-southeast-2.amazonaws.com/cloudformation
+
+Resources:
+  # Stack 1: SQS Queues with DLQ
+  SQSStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub '${TemplatesBucketURL}/1-sqs-queues.yaml'
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+        MaxReceiveCount: 3
+        MessageRetentionPeriod: 345600
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-sqs-stack'
+        - Key: Environment
+          Value: production
+
+  # Stack 2: Lambda Functions
+  LambdaStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: SQSStack
+    Properties:
+      TemplateURL: !Sub '${TemplatesBucketURL}/2-lambda-functions.yaml'
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+        VpcId: !Ref VpcId
+        PrivateSubnetIds: !Join [',', !Ref PrivateSubnetIds]
+        LambdaSecurityGroupId: !Ref LambdaSecurityGroupId
+        DBHost: !Ref DBHost
+        DBPort: '5432'
+        DBName: cohort_2025
+        DBUser: s458
+        DBSecretArn: !Ref DBSecretArn
+        S3BucketName: !Ref S3BucketName
+        CognitoUserPoolId: !Ref CognitoUserPoolId
+        CognitoClientId: !Ref CognitoClientId
+        JWTSecretArn: !Ref JWTSecretArn
+        LambdaRoleArn: !Ref LambdaRoleArn
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-lambda-stack'
+        - Key: Environment
+          Value: production
+
+  # Stack 3: EC2 Auto Scaling Group
+  ASGStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: SQSStack
+    Properties:
+      TemplateURL: !Sub '${TemplatesBucketURL}/3-video-processor-asg.yaml'
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+        InstanceType: t2.micro
+        KeyPairName: !Ref KeyPairName
+        VpcId: !Ref VpcId
+        SubnetIds: !Join [',', !Ref PublicSubnetIds]
+        SecurityGroupId: !Ref EC2SecurityGroupId
+        IAMInstanceProfile: !Ref EC2InstanceProfile
+        MinSize: 1
+        MaxSize: 3
+        DesiredCapacity: 1
+        SQSQueueName: !GetAtt SQSStack.Outputs.VideoProcessingQueueName
+        TargetMessagesPerInstance: 5
+        DBHost: !Ref DBHost
+        DBPort: '5432'
+        DBName: cohort_2025
+        DBUser: s458
+        DBSecretArn: !Ref DBSecretArn
+        S3BucketName: !Ref S3BucketName
+        SQSQueueURL: !GetAtt SQSStack.Outputs.VideoProcessingQueueURL
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-asg-stack'
+        - Key: Environment
+          Value: production
+
+  # Stack 4: CloudFront CDN
+  CloudFrontStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub '${TemplatesBucketURL}/4-cloudfront-cdn.yaml'
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+        S3BucketName: !Ref S3BucketName
+        S3BucketDomainName: !Sub '${S3BucketName}.s3.ap-southeast-2.amazonaws.com'
+        PriceClass: PriceClass_All
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-cloudfront-stack'
+        - Key: Environment
+          Value: production
+
+  # Stack 5: EC2 Services (Job-Service & Client)
+  EC2ServicesStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: SQSStack
+    Properties:
+      TemplateURL: !Sub '${TemplatesBucketURL}/5-ec2-services.yaml'
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+        KeyPairName: !Ref KeyPairName
+        VpcId: !Ref VpcId
+        PublicSubnetId: !Ref PublicSubnetId
+        SecurityGroupId: !Ref EC2SecurityGroupId
+        IAMInstanceProfile: !Ref EC2InstanceProfile
+        DBHost: !Ref DBHost
+        DBPort: '5432'
+        DBName: cohort_2025
+        DBUser: s458
+        DBSecretArn: !Ref DBSecretArn
+        S3BucketName: !Ref S3BucketName
+        SQSQueueURL: !GetAtt SQSStack.Outputs.VideoProcessingQueueURL
+        CognitoUserPoolId: !Ref CognitoUserPoolId
+        CognitoClientId: !Ref CognitoClientId
+        ApiGatewayURL: !Ref ApiGatewayURL
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-ec2-services-stack'
+        - Key: Environment
+          Value: production
+
+  # Stack 6: ECS Fargate Services (Auth & Management)
+  ECSServicesStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub '${TemplatesBucketURL}/6-ecs-fargate-services.yaml'
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+        StudentID: !Ref StudentID
+        VpcId: !Ref VpcId
+        PublicSubnetIds: !Join [',', !Ref PublicSubnetIds]
+        PrivateSubnetIds: !Join [',', !Ref PrivateSubnetIds]
+        ECSSecurityGroupId: !Ref ECSSecurityGroupId
+        ECSTaskExecutionRoleArn: !Ref ECSTaskExecutionRoleArn
+        ECSTaskRoleArn: !Ref ECSTaskRoleArn
+        DBHost: !Ref DBHost
+        DBPort: '5432'
+        DBName: cohort_2025
+        DBUser: s458
+        DBSecretArn: !Ref DBSecretArn
+        S3BucketName: !Ref S3BucketName
+        CognitoUserPoolId: !Ref CognitoUserPoolId
+        CognitoClientId: !Ref CognitoClientId
+        JWTSecretArn: !Ref JWTSecretArn
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-ecs-services-stack'
+        - Key: Environment
+          Value: production
+
+Outputs:
+  # SQS Outputs
+  VideoProcessingQueueURL:
+    Description: Video processing queue URL
+    Value: !GetAtt SQSStack.Outputs.VideoProcessingQueueURL
+
+  DeadLetterQueueURL:
+    Description: Dead letter queue URL
+    Value: !GetAtt SQSStack.Outputs.DeadLetterQueueURL
+
+  # Lambda Outputs
+  GalleryServiceURL:
+    Description: Gallery service Lambda function URL
+    Value: !GetAtt LambdaStack.Outputs.GalleryServiceFunctionUrl
+
+  StreamingServiceURL:
+    Description: Streaming service Lambda function URL
+    Value: !GetAtt LambdaStack.Outputs.StreamingServiceFunctionUrl
+
+  # ASG Outputs
+  AutoScalingGroupName:
+    Description: Video processor Auto Scaling Group name
+    Value: !GetAtt ASGStack.Outputs.AutoScalingGroupName
+
+  # CloudFront Outputs
+  CloudFrontDistributionId:
+    Description: CloudFront distribution ID
+    Value: !GetAtt CloudFrontStack.Outputs.DistributionId
+
+  CloudFrontDomainName:
+    Description: CloudFront distribution domain name
+    Value: !GetAtt CloudFrontStack.Outputs.DistributionDomainName
+
+  CloudFrontURL:
+    Description: CloudFront distribution URL
+    Value: !GetAtt CloudFrontStack.Outputs.DistributionURL
+
+  # EC2 Services Outputs
+  JobServiceInstanceId:
+    Description: Job Service EC2 Instance ID
+    Value: !GetAtt EC2ServicesStack.Outputs.JobServiceInstanceId
+
+  JobServiceURL:
+    Description: Job Service URL
+    Value: !GetAtt EC2ServicesStack.Outputs.JobServiceURL
+
+  ClientInstanceId:
+    Description: Client EC2 Instance ID
+    Value: !GetAtt EC2ServicesStack.Outputs.ClientInstanceId
+
+  ClientURL:
+    Description: Client URL (use CloudFront in production)
+    Value: !GetAtt EC2ServicesStack.Outputs.ClientURL
+
+  # ECS Services Outputs
+  ECSClusterName:
+    Description: ECS Cluster Name
+    Value: !GetAtt ECSServicesStack.Outputs.ECSClusterName
+
+  AuthServiceName:
+    Description: Auth Service Name
+    Value: !GetAtt ECSServicesStack.Outputs.AuthServiceName
+
+  ManagementServiceName:
+    Description: Management Service Name
+    Value: !GetAtt ECSServicesStack.Outputs.ManagementServiceName
+
+  # Summary
+  DeploymentSummary:
+    Description: Deployment summary
+    Value: !Sub |
+      VideoForge A3 Infrastructure Deployed Successfully!
+
+      == Core Services ==
+      SQS Queue: ${SQSStack.Outputs.VideoProcessingQueueURL}
+      Gallery Service: ${LambdaStack.Outputs.GalleryServiceFunctionUrl}
+      Streaming Service: ${LambdaStack.Outputs.StreamingServiceFunctionUrl}
+      Auto Scaling Group: ${ASGStack.Outputs.AutoScalingGroupName}
+      CloudFront CDN: ${CloudFrontStack.Outputs.DistributionDomainName}
+
+      == EC2 Services ==
+      Job Service: ${EC2ServicesStack.Outputs.JobServiceURL}
+      Client: ${EC2ServicesStack.Outputs.ClientURL}
+
+      == ECS Fargate Services ==
+      ECS Cluster: ${ECSServicesStack.Outputs.ECSClusterName}
+      Auth Service: ${ECSServicesStack.Outputs.AuthServiceName}
+      Management Service: ${ECSServicesStack.Outputs.ManagementServiceName}

@@ -1,0 +1,90 @@
+{
+  "family": "video-forge-admin-dashboard",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "256",
+  "memory": "512",
+  "executionRoleArn": "arn:aws:iam::901444280953:role/Execution-Role-CAB432-ECS",
+  "taskRoleArn": "arn:aws:iam::901444280953:role/Task-Role-CAB432-ECS",
+  "containerDefinitions": [
+    {
+      "name": "admin-dashboard",
+      "image": "901444280953.dkr.ecr.ap-southeast-2.amazonaws.com/video-forge-admin-dashboard:latest",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 11434,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        {
+          "name": "PORT",
+          "value": "11434"
+        },
+        {
+          "name": "AWS_REGION",
+          "value": "ap-southeast-2"
+        },
+        {
+          "name": "COGNITO_USER_POOL_ID",
+          "value": "ap-southeast-2_jft50FBre"
+        },
+        {
+          "name": "S3_BUCKET_NAME",
+          "value": "video-forge-storage"
+        },
+        {
+          "name": "SQS_QUEUE_URL",
+          "value": "https://sqs.ap-southeast-2.amazonaws.com/901444280953/video-forge-video-processing-queue"
+        },
+        {
+          "name": "DB_HOST",
+          "value": "database-1-instance-1.ce2haupt2cta.ap-southeast-2.rds.amazonaws.com"
+        },
+        {
+          "name": "DB_NAME",
+          "value": "cohort_2025"
+        },
+        {
+          "name": "DB_USER",
+          "value": "s458"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "DB_PASSWORD",
+          "valueFrom": "arn:aws:secretsmanager:ap-southeast-2:901444280953:secret:/video-forge/database/postgres-password-iYPI55:PG_PASSWORD::"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/video-forge-admin-dashboard",
+          "awslogs-region": "ap-southeast-2",
+          "awslogs-stream-prefix": "ecs"
+        }
+      },
+      "healthCheck": {
+        "command": [
+          "CMD-SHELL",
+          "wget --no-verbose --tries=1 --spider http://localhost:11434/health || exit 1"
+        ],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 60
+      }
+    }
+  ],
+  "tags": [
+    {
+      "key": "qut-username",
+      "value": "n12159069@qut.edu.au"
+    },
+    {
+      "key": "purpose",
+      "value": "assessment-3"
+    }
+  ]
+}

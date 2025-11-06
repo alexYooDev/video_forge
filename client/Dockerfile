@@ -23,6 +23,7 @@ RUN npm install
 COPY . .
 
 # Set build-time environment variables for React
+ENV REACT_APP_API_BASE_URL=https://9aprzwxo9g.execute-api.ap-southeast-2.amazonaws.com/prod/api
 ENV REACT_APP_PIXABAY_API_KEY=51815028-d9f2434e9b26002e4b2bd4fa4
 ENV REACT_APP_PIXABAY_BASE_URL=https://pixabay.com/api/videos/
 

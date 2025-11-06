@@ -80,7 +80,9 @@ export const useJobs = (autoRefresh = true) => {
 
   useEffect(() => {
     fetchJobs();
-    fetchStats();
+    // TEMPORARY FIX: Comment out fetchStats to prevent logout loop due to route ordering bug in job-service
+    // TODO: Uncomment after deploying fixed job-service to EC2
+    // fetchStats();
   }, []);
 
   // Auto-refresh for jobs that are processing
@@ -102,7 +104,8 @@ export const useJobs = (autoRefresh = true) => {
 
   const refetchAll = useCallback(async () => {
     await fetchJobs();
-    await fetchStats();
+    // TEMPORARY FIX: Comment out fetchStats to prevent logout loop
+    // await fetchStats();
   }, []);
 
   return {

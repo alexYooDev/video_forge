@@ -13,6 +13,7 @@ class S3Service {
   constructor() {
     this.region = process.env.AWS_REGION || 'ap-southeast-2';
     this.bucketName = null;
+    this.cloudFrontDomain = process.env.CLOUDFRONT_DOMAIN || 'd3vlpici5fmp7i.cloudfront.net';
     this.s3Client = new S3Client({ region: this.region });
     this.initialized = false;
   }
@@ -165,41 +166,36 @@ class S3Service {
   async getPresignedUrl(s3Key, operation = 'getObject', options = {}, expiresIn = 3600) {
     await this.ensureInitialized();
     try {
-      // For getObject operations, check if file exists first
+      // For getObject operations, use CloudFront for edge caching
       if (operation === 'getObject') {
         const exists = await this.fileExists(s3Key);
         if (!exists) {
           throw NotFound(`File not found in S3: ${s3Key}`);
         }
+
+        // Return CloudFront URL (cached at edge locations globally)
+        const cloudFrontUrl = `https://${this.cloudFrontDomain}/${s3Key}`;
+        apiLogger.s3('Generated CloudFront URL', { s3Key, cloudFrontDomain: this.cloudFrontDomain });
+        return cloudFrontUrl;
       }
 
-      let command;
-
-      if (operation === 'putObject') {
-        command = new PutObjectCommand({
-          Bucket: this.bucketName,
-          Key: s3Key,
-          ...options
-        });
-      } else {
-        command = new GetObjectCommand({
-          Bucket: this.bucketName,
-          Key: s3Key,
-          ResponseContentDisposition: options.ResponseContentDisposition,
-          ResponseContentType: options.ResponseContentType,
-        });
-      }
+      // For putObject (uploads), use S3 presigned URLs
+      const command = new PutObjectCommand({
+        Bucket: this.bucketName,
+        Key: s3Key,
+        ...options
+      });
 
       const presignedUrl = await getSignedUrl(this.s3Client, command, { expiresIn });
-      apiLogger.s3('Generated pre-signed URL', { operation, s3Key });
+      apiLogger.s3('Generated S3 pre-signed URL for upload', { operation, s3Key });
 
       return presignedUrl;
     } catch (error) {
-      apiLogger.error('Failed to generate pre-signed URL', error, { s3Key, operation });
+      apiLogger.error('Failed to generate URL', error, { s3Key, operation });
       if (error.name === 'NotFound') {
         throw error; // Re-throw NotFound errors as-is
       }
-      throw InternalServerError(`Failed to generate pre-signed URL: ${error.message}`);
+      throw InternalServerError(`Failed to generate URL: ${error.message}`);
     }
   }
 

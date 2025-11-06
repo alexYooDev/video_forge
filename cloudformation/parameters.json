@@ -1,0 +1,90 @@
+[
+  {
+    "ParameterKey": "EnvironmentName",
+    "ParameterValue": "video-forge"
+  },
+  {
+    "ParameterKey": "VpcId",
+    "ParameterValue": "vpc-007bab53289655834"
+  },
+  {
+    "ParameterKey": "PublicSubnetIds",
+    "ParameterValue": "subnet-075811427d5564cf9,subnet-05a3b8177138c8b14,subnet-04ca053dcbe5f49cc"
+  },
+  {
+    "ParameterKey": "PrivateSubnetIds",
+    "ParameterValue": "subnet-08e89ff0d9b49c9ae,subnet-07ea9e4f9cc9159ca"
+  },
+  {
+    "ParameterKey": "EC2SecurityGroupId",
+    "ParameterValue": "sg-032bd1ff8cf77dbb9"
+  },
+  {
+    "ParameterKey": "LambdaSecurityGroupId",
+    "ParameterValue": "sg-032bd1ff8cf77dbb9"
+  },
+  {
+    "ParameterKey": "EC2InstanceProfile",
+    "ParameterValue": "CAB432-EC2-Role"
+  },
+  {
+    "ParameterKey": "LambdaRoleArn",
+    "ParameterValue": "arn:aws:iam::901444280953:role/CAB432-Lambda-Role"
+  },
+  {
+    "ParameterKey": "KeyPairName",
+    "ParameterValue": "n12159069-CAB432"
+  },
+  {
+    "ParameterKey": "DBHost",
+    "ParameterValue": "database-1-instance-1.ce2haupt2cta.ap-southeast-2.rds.amazonaws.com"
+  },
+  {
+    "ParameterKey": "DBSecretArn",
+    "ParameterValue": "arn:aws:secretsmanager:ap-southeast-2:901444280953:secret:/video-forge/database/postgres-password-iYPI55"
+  },
+  {
+    "ParameterKey": "S3BucketName",
+    "ParameterValue": "video-forge-storage"
+  },
+  {
+    "ParameterKey": "CognitoUserPoolId",
+    "ParameterValue": "ap-southeast-2_jft50FBre"
+  },
+  {
+    "ParameterKey": "CognitoClientId",
+    "ParameterValue": "59ff9f0j33qp7al3vje4j4isc0"
+  },
+  {
+    "ParameterKey": "JWTSecretArn",
+    "ParameterValue": "arn:aws:secretsmanager:ap-southeast-2:901444280953:secret:/video-forge/auth/jwt-secret-PYQwpg"
+  },
+  {
+    "ParameterKey": "TemplatesBucketURL",
+    "ParameterValue": "https://video-forge-storage.s3.ap-southeast-2.amazonaws.com/cloudformation"
+  },
+  {
+    "ParameterKey": "PublicSubnetId",
+    "ParameterValue": "subnet-075811427d5564cf9"
+  },
+  {
+    "ParameterKey": "ECSSecurityGroupId",
+    "ParameterValue": "sg-032bd1ff8cf77dbb9"
+  },
+  {
+    "ParameterKey": "ECSTaskExecutionRoleArn",
+    "ParameterValue": "arn:aws:iam::901444280953:role/ecsTaskExecutionRole"
+  },
+  {
+    "ParameterKey": "ECSTaskRoleArn",
+    "ParameterValue": "arn:aws:iam::901444280953:role/CAB432-EC2-Role"
+  },
+  {
+    "ParameterKey": "StudentID",
+    "ParameterValue": "n12159069"
+  },
+  {
+    "ParameterKey": "ApiGatewayURL",
+    "ParameterValue": "https://9aprzwxo9g.execute-api.ap-southeast-2.amazonaws.com/prod"
+  }
+]

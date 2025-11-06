@@ -1,6 +1,6 @@
 const { SecretsManagerClient, GetSecretValueCommand } = require('@aws-sdk/client-secrets-manager');
 const { SSMClient, GetParametersCommand } = require('@aws-sdk/client-ssm');
-const { processorLogger } = require('../utils/logger');
+const { apiLogger } = require('../utils/logger');
 
 class AWSConfigService {
   constructor() {
@@ -62,7 +62,7 @@ class AWSConfigService {
         return secretString;
       }
     } catch (error) {
-      processorLogger.systemError('Failed to get secret', error, { secretPath });
+      apiLogger.systemError('Failed to get secret', error, { secretPath });
       return null;
     }
   }
@@ -82,14 +82,14 @@ class AWSConfigService {
       
       return result;
     } catch (error) {
-      processorLogger.systemError('Failed to get parameters', error);
+      apiLogger.systemError('Failed to get parameters', error);
       return {};
     }
   }
 
 
   async loadConfiguration() {
-    processorLogger.system('Loading AWS configuration');
+    apiLogger.system('Loading AWS configuration');
 
     const mapping = this.getConfigMapping();
     const config = {};
@@ -98,10 +98,10 @@ class AWSConfigService {
       // Load secrets
       for (const [envVar, secretPath] of Object.entries(mapping.secrets)) {
         const secretValue = await this.getSecret(secretPath);
-        config[envVar] = secretValue;
-        processorLogger.system('Loaded secret', { envVar, status: secretValue ? 'SUCCESS' : 'FAILED' });
+        config[envVar] = secretValue || process.env[envVar]; // Fall back to env var
+        apiLogger.system('Loaded secret', { envVar, status: config[envVar] ? 'SUCCESS' : 'FAILED' });
         if (envVar.includes('COGNITO') && secretValue) {
-          processorLogger.system('Secret loaded', { envVar, secretPath });
+          apiLogger.system('Cognito secret loaded', { envVar, secretPath });
         }
       }
 
@@ -115,21 +115,22 @@ class AWSConfigService {
         const batchResults = await this.getParameters(batch);
         Object.assign(parameters, batchResults);
       }
-      
-      // Map back to environment variables
+
+      // Map back to environment variables with fallback
       for (const [envVar, paramPath] of Object.entries(mapping.parameters)) {
-        config[envVar] = parameters[paramPath];
-        processorLogger.system('Loaded parameter', { envVar, status: parameters[paramPath] ? 'SUCCESS' : 'FAILED' });
+        config[envVar] = parameters[paramPath] || process.env[envVar]; // Fall back to env var
+        apiLogger.system('Loaded parameter', { envVar, status: config[envVar] ? 'SUCCESS' : 'FAILED' });
         if (envVar.includes('COGNITO') && parameters[paramPath]) {
-          processorLogger.system('Parameter loaded', { envVar, paramPath });
+          apiLogger.system('Cognito parameter loaded', { envVar, paramPath });
         }
       }
 
-      processorLogger.system('AWS configuration loaded', { count: Object.keys(config).length });
+      apiLogger.system('AWS configuration loaded', { count: Object.keys(config).length });
       return config;
     } catch (error) {
-      processorLogger.systemError('AWS configuration load failed', error);
-      throw error;
+      apiLogger.systemError('AWS configuration load failed', error);
+      // Return env vars as fallback instead of throwing
+      return {};
     }
   }
 
@@ -138,9 +139,10 @@ class AWSConfigService {
     Object.entries(config).forEach(([key, value]) => {
       if (value !== null && value !== undefined) {
         process.env[key] = String(value);
-        const maskedValue = key.includes('PASSWORD') || key.includes('SECRET') ? '***' : value; processorLogger.system('Set environment variable', { key, value: maskedValue });
+        const maskedValue = key.includes('PASSWORD') || key.includes('SECRET') ? '***' : value;
+        apiLogger.system('Set environment variable', { key, value: maskedValue });
       } else {
-        processorLogger.system('Skipped environment variable', { key, reason: 'null/undefined' });
+        apiLogger.system('Skipped environment variable', { key, reason: 'null/undefined' });
       }
     });
   }
@@ -162,8 +164,13 @@ class AWSConfigService {
 
   // Get environment-specific configuration
   async getEnvironmentConfig() {
-    // Load configuration from AWS
-    const config = await this.loadConfiguration();
+    // Try to load configuration from AWS, fall back to env vars on failure
+    let config = {};
+    try {
+      config = await this.loadConfiguration();
+    } catch (error) {
+      apiLogger.system('Failed to load AWS config, using environment variables', { error: error.message });
+    }
 
     return {
       environment: process.env.NODE_ENV || 'development',
@@ -174,21 +181,24 @@ class AWSConfigService {
         host: process.env.SERVER_HOST || (this.isDevelopment() ? 'localhost' : 'video-forge.cab432.com')
       },
       database: {
-        host: config.PG_HOST,
-        port: parseInt(config.PG_PORT || '5432'),
-        database: config.PG_DATABASE,
-        username: config.PG_USERNAME,
-        password: config.PG_PASSWORD
+        host: config.PG_HOST || process.env.PG_HOST || process.env.DB_HOST,
+        port: parseInt(config.PG_PORT || process.env.PG_PORT || process.env.DB_PORT || '5432'),
+        database: config.PG_DATABASE || process.env.PG_DATABASE || process.env.DB_NAME,
+        username: config.PG_USERNAME || process.env.PG_USERNAME || process.env.DB_USER,
+        password: config.PG_PASSWORD || process.env.PG_PASSWORD || process.env.DB_PASSWORD
       },
       aws: {
         region: process.env.AWS_REGION || 'ap-southeast-2',
-        s3BucketName: config.S3_BUCKET_NAME || 'video-forge-storage',
-        cognitoUserPoolId: config.COGNITO_USER_POOL_ID,
-        cognitoClientId: config.COGNITO_CLIENT_ID,
-        cognitoClientSecret: config.COGNITO_CLIENT_SECRET
+        s3BucketName: config.S3_BUCKET_NAME || process.env.S3_BUCKET_NAME || 'video-forge-storage',
+        cognitoUserPoolId: config.COGNITO_USER_POOL_ID || process.env.COGNITO_USER_POOL_ID,
+        cognitoClientId: config.COGNITO_CLIENT_ID || process.env.COGNITO_CLIENT_ID,
+        cognitoClientSecret: config.COGNITO_CLIENT_SECRET || process.env.COGNITO_CLIENT_SECRET
+      },
+      app: {
+        baseUrl: config.APP_BASE_URL || process.env.APP_BASE_URL || 'http://localhost:8000'
       },
       features: {
-        logLevel: config.LOG_LEVEL || (this.isDevelopment() ? 'debug' : 'info'),
+        logLevel: config.LOG_LEVEL || process.env.LOG_LEVEL || (this.isDevelopment() ? 'debug' : 'info'),
         enableHotReload: this.isDevelopment()
       }
     };
@@ -196,24 +206,24 @@ class AWSConfigService {
 
   // Get database configuration for Sequelize
   async getDatabaseConfig() {
-    // Try to load configuration from AWS, but fall back to environment variables
+    // Try to load configuration from AWS, fall back to env vars on failure
     let awsConfig = {};
     try {
       awsConfig = await this.loadConfiguration();
     } catch (error) {
-      processorLogger.warn('AWS config load failed, using environment variables', { error: error.message });
+      apiLogger.system('Failed to load AWS config for database, using environment variables', { error: error.message });
     }
 
     const config = {
-      host: awsConfig.PG_HOST || process.env.DB_HOST,
-      port: parseInt(awsConfig.PG_PORT || process.env.DB_PORT || '5432'),
-      database: awsConfig.PG_DATABASE || process.env.DB_NAME,
-      username: awsConfig.PG_USERNAME || process.env.DB_USER,
-      password: awsConfig.PG_PASSWORD || process.env.DB_PASSWORD,
+      host: awsConfig.PG_HOST || process.env.PG_HOST || process.env.DB_HOST,
+      port: parseInt(awsConfig.PG_PORT || process.env.PG_PORT || process.env.DB_PORT || '5432'),
+      database: awsConfig.PG_DATABASE || process.env.PG_DATABASE || process.env.DB_NAME,
+      username: awsConfig.PG_USERNAME || process.env.PG_USERNAME || process.env.DB_USER,
+      password: awsConfig.PG_PASSWORD || process.env.PG_PASSWORD || process.env.DB_PASSWORD,
       dialect: 'postgres',
-      logging: this.isDevelopment() ? (msg) => processorLogger.db(msg) : false,
+      logging: this.isDevelopment() ? (msg) => apiLogger.db(msg) : false,
       pool: {
-        max: this.isDevelopment() ? 5 : 2, // Reduced for QUT database connection limits per role
+        max: this.isDevelopment() ? 5 : 5, // Reduced to prevent connection limit issues
         min: 0,
         acquire: 30000,
         idle: 10000
@@ -226,13 +236,12 @@ class AWSConfigService {
       }
     };
 
-    processorLogger.db('Database config loaded', {
+    apiLogger.db('Database config loaded', {
       host: config.host,
       port: config.port,
       database: config.database,
       username: config.username,
-      password: config.password ? '***' : 'MISSING',
-      source: awsConfig.PG_HOST ? 'AWS' : 'ENV'
+      password: config.password ? '***' : 'MISSING'
     });
 
     return config;
