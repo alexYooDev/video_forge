@@ -2,6 +2,8 @@
 
 Video Forge is a modular, microservices-based video processing application. It provides a React client, multiple backend services (auth, jobs, gallery, streaming, admin dashboard, etc.), and a video processing worker. The repository includes CloudFormation templates for AWS deployment and Dockerfiles for containerized development.
 
+[Try the application](https://video-forge-v2.cab432.com/)
+
 ## Repository layout
 
 - `client/` — React front-end application (CRA). Contains Dockerfile and nginx config for container builds.
